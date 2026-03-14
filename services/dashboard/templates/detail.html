@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Alert Detail — XAI-SOAR</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e0e0e0; }
+  header {
+    background: #1a1d27; border-bottom: 1px solid #2a2d3e;
+    padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+  }
+  header a { color: #6c8ebf; text-decoration: none; font-size: 0.85rem; }
+  header a:hover { text-decoration: underline; }
+  header h1 { font-size: 1rem; font-weight: 600; color: #fff; }
+  .content { max-width: 960px; margin: 32px auto; padding: 0 24px; }
+  .card {
+    background: #1a1d27; border: 1px solid #2a2d3e;
+    border-radius: 6px; padding: 20px 24px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
+             letter-spacing: 0.06em; color: #6c8ebf; margin-bottom: 14px; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+  .meta-item label { display: block; font-size: 0.7rem; color: #666;
+                     text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+  .meta-item span { font-size: 0.88rem; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:4px; font-size:0.75rem; font-weight:600; }
+  .badge-high   { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d55; }
+  .badge-medium { background:#ffa50022; color:#ffb347; border:1px solid #ffa50055; }
+  .badge-low    { background:#00ff8822; color:#39ff88; border:1px solid #00ff8855; }
+  .badge-benign { background:#ffffff11; color:#aaa;    border:1px solid #ffffff22; }
+  .annotation {
+    background: #0f1117; border: 1px solid #2a2d3e; border-left: 3px solid #ff6b6b;
+    border-radius: 4px; padding: 14px 16px;
+    font-family: 'Courier New', monospace; font-size: 0.8rem;
+    line-height: 1.6; color: #ccc; white-space: pre-wrap; word-break: break-word;
+  }
+  .annotation.benign { border-left-color: #39ff88; }
+  .feature-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .feature-table th {
+    background: #13161f; color: #888; font-size: 0.7rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 8px 12px; text-align: left; border-bottom: 1px solid #2a2d3e;
+  }
+  .feature-table td { padding: 8px 12px; border-bottom: 1px solid #1e2130; }
+  .feature-table tr:hover td { background: #1e2130; }
+  .positive { color: #ff6b6b; }
+  .negative { color: #39ff88; }
+  code { font-family: 'Courier New', monospace; font-size: 0.78rem;
+         background: #13161f; padding: 2px 6px; border-radius: 3px; }
+  .ttp-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ttp-tag  { background: #1e2d4a; color: #6c8ebf; border: 1px solid #2a4a7f;
+              padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; font-family: monospace; }
+  .decision-form { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; margin-top: 6px; }
+  .decision-form textarea {
+    flex: 1; min-width: 200px; background: #13161f; border: 1px solid #2a2d3e;
+    color: #e0e0e0; border-radius: 4px; padding: 8px; font-size: 0.82rem;
+    font-family: inherit; resize: vertical;
+  }
+  .btn { padding: 8px 18px; border: none; border-radius: 4px; font-size: 0.82rem;
+         font-weight: 600; cursor: pointer; }
+  .btn-confirm { background: #ff4d4d33; color: #ff6b6b; border: 1px solid #ff4d4d55; }
+  .btn-dismiss { background: #39ff8822; color: #39ff88; border: 1px solid #39ff8855; }
+  .btn-confirm:hover { background: #ff4d4d55; }
+  .btn-dismiss:hover { background: #39ff8844; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/">&#8592; Back to Alert Queue</a>
+  <h1>Alert Detail</h1>
+</header>
+
+<div class="content">
+
+  <div class="card">
+    <h2>Summary</h2>
+    <div class="meta-grid">
+      <div class="meta-item">
+        <label>Prediction</label>
+        {% if alert.pred_label == 1 %}
+          <span class="badge badge-{{ (alert.severity_label or 'LOW') | lower }}">
+            MALICIOUS &mdash; {{ alert.severity_label }}
+          </span>
+        {% else %}
+          <span class="badge badge-benign">Benign</span>
+        {% endif %}
+      </div>
+      <div class="meta-item">
+        <label>Confidence</label>
+        <span>{{ '%.2f' | format(alert.pred_proba * 100) }}%</span>
+      </div>
+      <div class="meta-item">
+        <label>Model</label>
+        <span>{{ alert.model }} ({{ alert.tier }})</span>
+      </div>
+      <div class="meta-item">
+        <label>Explanation Time</label>
+        <span>{{ '%.1f' | format(alert.explain_time_ms) }} ms</span>
+      </div>
+      <div class="meta-item">
+        <label>Flow ID</label>
+        <span><code>{{ alert.flow_id }}</code></span>
+      </div>
+      <div class="meta-item">
+        <label>Ground Truth</label>
+        <span>
+          {% if alert.true_label == 1 %}Malicious
+          {% elif alert.true_label == 0 %}Benign
+          {% else %}Unknown{% endif %}
+        </span>
+      </div>
+      <div class="meta-item">
+        <label>Alert Time</label>
+        <span>{{ alert.translated_ts }}</span>
+      </div>
+      <div class="meta-item">
+        <label>Analyst Decision</label>
+        <span>{{ alert.analyst_decision or 'pending' }}</span>
+      </div>
+    </div>
+  </div>
+
+  {% if alert.mitre_ttps %}
+  <div class="card">
+    <h2>MITRE ATT&amp;CK Techniques</h2>
+    <div class="ttp-list">
+      {% for ttp in alert.mitre_ttps %}
+        <span class="ttp-tag">
+          {{ ttp }}
+          {% if alert.mitre_names and loop.index0 < (alert.mitre_names | length) %}
+            &mdash; {{ alert.mitre_names[loop.index0] }}
+          {% endif %}
+        </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>XAI Analyst Annotation</h2>
+    <div class="annotation {% if alert.pred_label == 0 %}benign{% endif %}">{{ alert.annotation or 'No annotation available.' }}</div>
+  </div>
+
+  {% if alert.top_k_json %}
+  <div class="card">
+    <h2>Top-{{ alert.top_k_json | length }} Feature Attributions</h2>
+    <table class="feature-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Feature</th>
+          <th>Value</th>
+          <th>Contribution</th>
+          <th>Direction</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in alert.top_k_json %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td><code>{{ f.feature }}</code></td>
+          <td>{{ '%.4f' | format(f.value) }}</td>
+          <td class="{{ f.direction }}">{{ '%+.4f' | format(f.contribution) }}</td>
+          <td class="{{ f.direction }}">{{ f.direction }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Analyst Decision</h2>
+    <form action="/decision" method="post">
+      <input type="hidden" name="alert_id" value="{{ alert.id }}">
+      <div class="decision-form">
+        <textarea name="note" rows="2" placeholder="Optional note..."></textarea>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button type="submit" name="decision" value="confirmed" class="btn btn-confirm">
+            Confirm Alert
+          </button>
+          <button type="submit" name="decision" value="dismissed" class="btn btn-dismiss">
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </form>
+    {% if alert.analyst_note %}
+      <p style="margin-top:10px; font-size:0.8rem; color:#888;">
+        Previous note: {{ alert.analyst_note }}
+      </p>
+    {% endif %}
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>XAI-SOAR Alert Dashboard</title>
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e0e0e0; }
+
+  header {
+    background: #1a1d27; border-bottom: 1px solid #2a2d3e;
+    padding: 14px 24px; display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { font-size: 1.1rem; font-weight: 600; color: #fff; }
+  header .subtitle { font-size: 0.75rem; color: #888; }
+
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600; }
+  .badge-high   { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d55; }
+  .badge-medium { background:#ffa50022; color:#ffb347; border:1px solid #ffa50055; }
+  .badge-low    { background:#00ff8822; color:#39ff88; border:1px solid #00ff8855; }
+  .badge-benign { background:#ffffff11; color:#aaa;    border:1px solid #ffffff22; }
+  .badge-pending    { background:#3a3f55; color:#aaa; border:1px solid #555; }
+  .badge-confirmed  { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d44; }
+  .badge-dismissed  { background:#39ff8822; color:#39ff88; border:1px solid #39ff8844; }
+
+  .toolbar {
+    padding: 12px 24px; display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid #2a2d3e; background: #13161f;
+  }
+  .toolbar a, .toolbar button {
+    background: #2a2d3e; color: #ccc; border: 1px solid #3a3f55;
+    padding: 5px 12px; border-radius: 4px; font-size: 0.8rem;
+    cursor: pointer; text-decoration: none;
+  }
+  .toolbar a:hover, .toolbar button:hover { background: #3a3f55; color: #fff; }
+  .toolbar .active { background: #4a5080; color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: #1a1d27; color: #888; font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 10px 16px; text-align: left; border-bottom: 1px solid #2a2d3e;
+    position: sticky; top: 0; z-index: 1;
+  }
+  tbody tr { border-bottom: 1px solid #1e2130; transition: background 0.1s; }
+  tbody tr:hover { background: #1e2130; }
+  tbody td { padding: 10px 16px; font-size: 0.82rem; vertical-align: middle; }
+
+  .flow-id { font-family: monospace; color: #6c8ebf; font-size: 0.78rem; }
+  .ts      { color: #666; font-size: 0.75rem; }
+  .proba   { font-family: monospace; }
+  .features { color: #aaa; font-size: 0.72rem; max-width: 280px;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  a.detail-link { color: #6c8ebf; text-decoration: none; }
+  a.detail-link:hover { text-decoration: underline; }
+
+  .table-wrap { overflow-x: auto; max-height: calc(100vh - 130px); overflow-y: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>XAI-SOAR Alert Dashboard</h1>
+    <div class="subtitle">Encrypted Traffic Anomaly Detection — Real-time XAI Pipeline</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <a href="/" class="{{ 'active' if not malicious_only }}">All Flows</a>
+  <a href="/?malicious_only=true" class="{{ 'active' if malicious_only }}">Malicious Only</a>
+  <a href="/metrics" target="_blank">↗ Metrics JSON</a>
+  <span style="margin-left:auto; font-size:0.75rem; color:#555;">
+    Auto-refresh {{ refresh_ms }}ms
+  </span>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Flow ID</th>
+        <th>Time</th>
+        <th>Prediction</th>
+        <th>Confidence</th>
+        <th>Severity</th>
+        <th>MITRE TTPs</th>
+        <th>Top Features</th>
+        <th>Model</th>
+        <th>Decision</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody
+      hx-get="/alerts/live?malicious_only={{ malicious_only | lower }}"
+      hx-trigger="every {{ refresh_ms }}ms"
+      hx-swap="innerHTML">
+      {% include "_alert_rows.html" %}
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

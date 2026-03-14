@@ -1,0 +1,155 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# XAI-SOAR Pipeline — docker-compose.yml
+# Build order: kafka → producer → inference → translator → postgres → dashboard
+# Start everything: docker compose up --build
+# Start one service: docker compose up kafka kafka-ui
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── 1. Kafka Broker (KRaft mode — no Zookeeper) ───────────────────────────
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: kafka
+    ports:
+      - "9092:9092"       # external access from host (e.g. testing scripts)
+      - "9093:9093"       # controller port (internal)
+      - "9094:9094"       # external listener — host access
+    environment:  
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 24
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - net
+
+  # ── 2. Producer ────────────────────────────────────────────────────────────
+  producer:
+    build: ./services/producer
+    container_name: producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER: kafka:9092
+      TOPIC: raw_flows
+      STREAM_DELAY_MS: 500          # milliseconds between messages (tune freely)
+      DATASET_PATH: /data/dataset.csv
+      LOOP: "true"                  # replay dataset continuously when done
+    volumes:
+      - ./data:/data:ro             # mount dataset read-only
+    networks:
+      - net
+    restart: on-failure
+
+  # ── 3. Inference ───────────────────────────────────────────────────────────
+  inference:
+    build: ./services/inference
+    container_name: inference
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER: kafka:9092
+      INPUT_TOPIC: raw_flows
+      OUTPUT_TOPIC: alerts
+      MODEL_DIR: /models
+      CONSUMER_GROUP: inference_group
+      EXPLAIN_K: 5                  # top-k features per explanation
+      LIME_PROBA_THRESHOLD: "0.80"
+      LIME_UNCERTAIN_LO: "0.45"
+      LIME_UNCERTAIN_HI: "0.55"
+    volumes:
+      - ./models:/models:ro         # mount serialised joblib files read-only
+    networks:
+      - net
+    restart: on-failure
+
+  # ── 4. XAI→Alert Translator ────────────────────────────────────────────────
+  translator:
+    build: ./services/translator
+    container_name: translator
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER: kafka:9092
+      INPUT_TOPIC: alerts
+      CONSUMER_GROUP: translator_group
+      DATABASE_URL: postgresql://user:pass@postgres:5432/soar
+    networks:
+      - net
+    restart: on-failure
+
+  # ── 5. PostgreSQL ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: soar
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./services/dashboard/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d soar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - net
+
+  # ── 6. Dashboard ───────────────────────────────────────────────────────────
+  dashboard:
+    build: ./services/dashboard
+    container_name: dashboard
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgresql://user:pass@postgres:5432/soar
+      REFRESH_INTERVAL_MS: 3000     # how often the UI polls for new alerts
+    networks:
+      - net
+    restart: on-failure
+
+  # ── 7. Kafka UI (dev only — to be removed in production) ─────────────────────────
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:latest
+    container_name: kafka_ui
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - net
+
+networks:
+  net:
+    driver: bridge
+
+volumes:
+  pgdata:

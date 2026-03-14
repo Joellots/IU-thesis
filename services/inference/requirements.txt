@@ -1,0 +1,8 @@
+kafka-python-ng==2.2.3
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.4.2
+xgboost==2.0.3
+interpret==0.6.1
+shap==0.45.1
+lime==0.2.0.1

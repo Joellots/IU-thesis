@@ -1,0 +1,40 @@
+{% for a in alerts %}
+{% set ttps = a.mitre_ttps if a.mitre_ttps else [] %}
+{% if a.pred_label == 1 %}
+  {% set sev = a.severity_label | lower if a.severity_label else 'low' %}
+  {% set pred_badge = '<span class="badge badge-' + sev + '">' + (a.severity_label or 'ALERT') + '</span>' %}
+{% else %}
+  {% set pred_badge = '<span class="badge badge-benign">benign</span>' %}
+{% endif %}
+<tr>
+  <td><span class="flow-id">{{ a.flow_id[:12] }}…</span></td>
+  <td><span class="ts">{{ a.translated_ts.strftime('%H:%M:%S') if a.translated_ts else '—' }}</span></td>
+  <td>{{ pred_badge | safe }}</td>
+  <td><span class="proba">{{ '%.1f%%' | format(a.pred_proba * 100) }}</span></td>
+  <td>
+    {% if a.pred_label == 1 %}
+      <span class="badge badge-{{ (a.severity_label or 'LOW') | lower }}">
+        {{ a.severity_label or '—' }}
+      </span>
+    {% else %}—{% endif %}
+  </td>
+  <td style="font-size:0.72rem; color:#6c8ebf;">
+    {% if ttps %}
+      {% for t in ttps %}<code>{{ t }}</code>{% if not loop.last %} {% endif %}{% endfor %}
+    {% else %}—{% endif %}
+  </td>
+  <td><span class="features">{{ a.top_k_features or '—' }}</span></td>
+  <td style="font-size:0.72rem; color:#888;">{{ a.model }}<br>
+    <span style="color:#555;">{{ a.tier }}</span></td>
+  <td>
+    <span class="badge badge-{{ a.analyst_decision or 'pending' }}">
+      {{ a.analyst_decision or 'pending' }}
+    </span>
+  </td>
+  <td><a class="detail-link" href="/alert/{{ a.id }}">Detail →</a></td>
+</tr>
+{% else %}
+<tr><td colspan="10" style="text-align:center;color:#555;padding:40px;">
+  No alerts yet — waiting for pipeline data…
+</td></tr>
+{% endfor %}
