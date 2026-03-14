@@ -69,17 +69,17 @@ def fetch_metrics():
     cur  = conn.cursor()
 
     cur.execute("SELECT COUNT(*) AS total FROM alerts")
-    total = cur.fetchone()["total"]
+    total = cur.fetchone()["total"] or 0
 
     cur.execute("SELECT COUNT(*) AS mal FROM alerts WHERE pred_label = 1")
-    malicious = cur.fetchone()["mal"]
+    malicious = cur.fetchone()["mal"] or 0
 
     cur.execute("""
         SELECT COUNT(*) AS tier2
         FROM raw_explanations
         WHERE model IN ('XGBoost_SHAP', 'XGBoost_LIME')
     """)
-    tier2_count = cur.fetchone()["tier2"]
+    tier2_count = cur.fetchone()["tier2"] or 0
 
     cur.execute("""
         SELECT AVG(explain_time_ms) AS avg_ms
@@ -101,9 +101,8 @@ def fetch_metrics():
         SELECT analyst_decision, COUNT(*) AS n
         FROM alerts GROUP BY analyst_decision
     """)
-    decisions = {r["analyst_decision"]: r["n"] for r in cur.fetchall()}
+    decisions = {r["analyst_decision"]: int(r["n"]) for r in cur.fetchall()}
 
-    # TP/FP/TN/FN (only valid where true_label != -1)
     cur.execute("""
         SELECT
             SUM(CASE WHEN pred_label=1 AND true_label=1 THEN 1 ELSE 0 END) AS tp,
@@ -113,21 +112,24 @@ def fetch_metrics():
         FROM alerts WHERE true_label != -1
     """)
     cm = cur.fetchone()
-
     conn.close()
 
     return {
-        "total_flows":          total,
-        "malicious_detected":   malicious,
-        "benign_detected":      total - malicious,
-        "tier2_trigger_count":  tier2_count // 2 if tier2_count else 0,
-        "tier2_trigger_rate":   round(tier2_count / 2 / total, 4) if total else 0,
-        "avg_explain_ms":       round(avg_explain, 2) if avg_explain else None,
-        "avg_pipeline_ms":      round(avg_pipeline, 2) if avg_pipeline else None,
-        "analyst_decisions":    decisions,
-        "confusion_matrix":     dict(cm) if cm else {},
+        "total_flows":         int(total),
+        "malicious_detected":  int(malicious),
+        "benign_detected":     int(total - malicious),
+        "tier2_trigger_count": int(tier2_count // 2),
+        "tier2_trigger_rate":  round(tier2_count / 2 / total, 4) if total else 0,
+        "avg_explain_ms":      round(float(avg_explain), 2) if avg_explain else None,
+        "avg_pipeline_ms":     round(float(avg_pipeline), 2) if avg_pipeline else None,
+        "analyst_decisions":   decisions,
+        "confusion_matrix": {
+            "tp": int(cm["tp"] or 0),
+            "fp": int(cm["fp"] or 0),
+            "tn": int(cm["tn"] or 0),
+            "fn": int(cm["fn"] or 0),
+        } if cm else {},
     }
-
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 

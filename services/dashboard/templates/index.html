@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>XAI-SOAR Alert Dashboard</title>
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <style>
@@ -10,53 +11,78 @@
 
   header {
     background: #1a1d27; border-bottom: 1px solid #2a2d3e;
-    padding: 14px 24px; display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px; display: flex; align-items: center; gap: 12px;
   }
-  header h1 { font-size: 1.1rem; font-weight: 600; color: #fff; }
-  header .subtitle { font-size: 0.75rem; color: #888; }
+  header h1 { font-size: 1rem; font-weight: 600; color: #fff; }
+  header .subtitle { font-size: 0.72rem; color: #888; }
 
-  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600; }
-  .badge-high   { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d55; }
-  .badge-medium { background:#ffa50022; color:#ffb347; border:1px solid #ffa50055; }
-  .badge-low    { background:#00ff8822; color:#39ff88; border:1px solid #00ff8855; }
-  .badge-benign { background:#ffffff11; color:#aaa;    border:1px solid #ffffff22; }
-  .badge-pending    { background:#3a3f55; color:#aaa; border:1px solid #555; }
-  .badge-confirmed  { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d44; }
-  .badge-dismissed  { background:#39ff8822; color:#39ff88; border:1px solid #39ff8844; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600; white-space:nowrap; }
+  .badge-high      { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d55; }
+  .badge-medium    { background:#ffa50022; color:#ffb347; border:1px solid #ffa50055; }
+  .badge-low       { background:#00ff8822; color:#39ff88; border:1px solid #00ff8855; }
+  .badge-benign    { background:#ffffff11; color:#aaa;    border:1px solid #ffffff22; }
+  .badge-pending   { background:#3a3f55;   color:#aaa;    border:1px solid #555; }
+  .badge-confirmed { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d44; }
+  .badge-dismissed { background:#39ff8822; color:#39ff88; border:1px solid #39ff8844; }
 
   .toolbar {
-    padding: 12px 24px; display: flex; align-items: center; gap: 12px;
-    border-bottom: 1px solid #2a2d3e; background: #13161f;
+    padding: 10px 20px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid #2a2d3e; background: #13161f; flex-wrap: wrap;
   }
-  .toolbar a, .toolbar button {
+  .toolbar a {
     background: #2a2d3e; color: #ccc; border: 1px solid #3a3f55;
-    padding: 5px 12px; border-radius: 4px; font-size: 0.8rem;
-    cursor: pointer; text-decoration: none;
+    padding: 4px 10px; border-radius: 4px; font-size: 0.78rem;
+    cursor: pointer; text-decoration: none; white-space: nowrap;
   }
-  .toolbar a:hover, .toolbar button:hover { background: #3a3f55; color: #fff; }
+  .toolbar a:hover { background: #3a3f55; color: #fff; }
   .toolbar .active { background: #4a5080; color: #fff; }
 
-  table { width: 100%; border-collapse: collapse; }
-  thead th {
-    background: #1a1d27; color: #888; font-size: 0.7rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 10px 16px; text-align: left; border-bottom: 1px solid #2a2d3e;
-    position: sticky; top: 0; z-index: 1;
+  .table-wrap {
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: calc(100vh - 110px);
   }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  col.col-time     { width: 7%;  }
+  col.col-pred     { width: 11%; }
+  col.col-conf     { width: 7%;  }
+  col.col-sev      { width: 9%;  }
+  col.col-ttps     { width: 13%; }
+  col.col-features { width: 30%; }
+  col.col-decision { width: 11%; }
+  col.col-action   { width: 12%; }
+
+  thead th {
+    background: #1a1d27; color: #888; font-size: 0.68rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 9px 10px; text-align: left; border-bottom: 1px solid #2a2d3e;
+    position: sticky; top: 0; z-index: 1;
+    overflow: hidden; white-space: nowrap;
+  }
+
   tbody tr { border-bottom: 1px solid #1e2130; transition: background 0.1s; }
   tbody tr:hover { background: #1e2130; }
-  tbody td { padding: 10px 16px; font-size: 0.82rem; vertical-align: middle; }
+  tbody td { padding: 8px 10px; font-size: 0.8rem; vertical-align: middle; overflow: hidden; }
 
-  .flow-id { font-family: monospace; color: #6c8ebf; font-size: 0.78rem; }
-  .ts      { color: #666; font-size: 0.75rem; }
-  .proba   { font-family: monospace; }
-  .features { color: #aaa; font-size: 0.72rem; max-width: 280px;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ts    { color: #666; font-size: 0.72rem; white-space: nowrap; }
+  .proba { font-family: monospace; font-size: 0.8rem; }
+  .features { color: #aaa; font-size: 0.69rem; word-break: break-word; line-height: 1.4; }
+  .ttps     { font-size: 0.7rem; color: #6c8ebf; word-break: break-word; line-height: 1.4; }
 
-  a.detail-link { color: #6c8ebf; text-decoration: none; }
-  a.detail-link:hover { text-decoration: underline; }
-
-  .table-wrap { overflow-x: auto; max-height: calc(100vh - 130px); overflow-y: auto; }
+  a.detail-link {
+    display: inline-block;
+    background: #2a2d3e; color: #6c8ebf; border: 1px solid #3a3f55;
+    border-radius: 4px; padding: 3px 8px; font-size: 0.73rem;
+    text-decoration: none; white-space: nowrap;
+  }
+  a.detail-link:hover { background: #3a3f55; color: #fff; }
 </style>
 </head>
 <body>
@@ -64,33 +90,41 @@
 <header>
   <div>
     <h1>XAI-SOAR Alert Dashboard</h1>
-    <div class="subtitle">Encrypted Traffic Anomaly Detection — Real-time XAI Pipeline</div>
+    <div class="subtitle">Encrypted Traffic Anomaly Detection &mdash; Real-time XAI Pipeline</div>
   </div>
 </header>
 
 <div class="toolbar">
   <a href="/" class="{{ 'active' if not malicious_only }}">All Flows</a>
   <a href="/?malicious_only=true" class="{{ 'active' if malicious_only }}">Malicious Only</a>
-  <a href="/metrics" target="_blank">↗ Metrics JSON</a>
-  <span style="margin-left:auto; font-size:0.75rem; color:#555;">
-    Auto-refresh {{ refresh_ms }}ms
+  <a href="/metrics" target="_blank">&#8599; Metrics</a>
+  <span style="margin-left:auto; font-size:0.72rem; color:#555;">
+    Auto-refresh every {{ refresh_ms }}ms
   </span>
 </div>
 
 <div class="table-wrap">
   <table>
+    <colgroup>
+      <col class="col-time">
+      <col class="col-pred">
+      <col class="col-conf">
+      <col class="col-sev">
+      <col class="col-ttps">
+      <col class="col-features">
+      <col class="col-decision">
+      <col class="col-action">
+    </colgroup>
     <thead>
       <tr>
-        <th>Flow ID</th>
         <th>Time</th>
         <th>Prediction</th>
-        <th>Confidence</th>
+        <th>Conf.</th>
         <th>Severity</th>
         <th>MITRE TTPs</th>
         <th>Top Features</th>
-        <th>Model</th>
         <th>Decision</th>
-        <th></th>
+        <th>Action</th>
       </tr>
     </thead>
     <tbody
