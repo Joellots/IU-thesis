@@ -37,7 +37,33 @@ services:
     networks:
       - net
 
-  # ── 2. Producer ────────────────────────────────────────────────────────────
+  # ── 2. Producers ────────────────────────────────────────────────────────────
+  nfstream:
+    build: ./services/nfstream
+    container_name: xai_nfstream
+    # REQUIRED for host interface access — container shares host network stack
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      INTERFACE: all            # your interface name
+      KAFKA_BROKER: localhost:9094   # localhost because network_mode: host
+      TOPIC: raw_flows
+      BPF_FILTER: "tcp port 443 or udp port 443 or tcp port 465 or tcp port 993 or tcp port 995 or tcp port 853"
+      IDLE_TIMEOUT: 15
+      ACTIVE_TIMEOUT: 120
+    depends_on:
+      - kafka
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.5"
+        reservations:
+          memory: 512m
+  
   producer:
     build: ./services/producer
     container_name: producer

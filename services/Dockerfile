@@ -42,4 +42,4 @@ COPY nfs_producer.py .
 # running with --privileged (which would expose the entire host).
 # These are set in docker-compose.yml via cap_add, not here.
 
-CMD ["python", "-u", "nfs_producer.py"]
+CMD ["python3", "-u", "nfs_producer.py"]

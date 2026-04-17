@@ -23,6 +23,7 @@ import json
 import time
 import logging
 import statistics
+import pandas as pd
 
 from nfstream import NFStreamer, NFPlugin
 from kafka import KafkaProducer
@@ -291,6 +292,8 @@ def main():
 
     log.info("Streaming started — waiting for flows...")
 
+    rows = [] 
+
     for flow in streamer:
         try:
             record = flow_to_record(flow)
@@ -303,10 +306,14 @@ def main():
                     f"errors: {error_count}  "
                     f"last app: {flow.application_name}"
                 )
+            rows.append(record)
 
         except Exception as e:
             error_count += 1
             log.warning(f"Failed to publish flow: {e}")
+    
+    df = pd.DataFrame(rows)
+    df.to_csv("aggregated_flows.csv", index=False)
 
     producer.flush()
     log.info(f"Streaming complete. Total flows: {flow_count}  errors: {error_count}")
