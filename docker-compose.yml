@@ -47,7 +47,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     environment:
-      INTERFACE: all            # your interface name
+      # INTERFACE: all            # your interface name
       KAFKA_BROKER: localhost:9094   # localhost because network_mode: host
       TOPIC: raw_flows
       BPF_FILTER: "tcp port 443 or udp port 443 or tcp port 465 or tcp port 993 or tcp port 995 or tcp port 853"
