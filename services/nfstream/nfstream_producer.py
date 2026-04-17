@@ -7,6 +7,15 @@ Captures live traffic from a network interface (or replays a PCAP),
 computes per-flow features using statistical_analysis + ExtendedFlowFeatures
 NFPlugin, maps columns to the model's expected feature names, and
 publishes completed flows to Kafka as JSON.
+
+Environment variables:
+    INTERFACE       Network interface name (default: auto-detected)
+    PCAP_FILE       Path to PCAP file — overrides INTERFACE if set
+    KAFKA_BROKER    Kafka broker address (default: localhost:9094)
+    TOPIC           Kafka topic (default: raw_flows)
+    BPF_FILTER      BPF filter string (default: encrypted traffic ports)
+    IDLE_TIMEOUT    Flow idle timeout seconds (default: 15)
+    ACTIVE_TIMEOUT  Flow active timeout seconds (default: 120)
 """
 
 import os
@@ -15,7 +24,7 @@ import time
 import logging
 import statistics
 import pandas as pd
-import psutil   # NEW
+import psutil
 
 from nfstream import NFStreamer, NFPlugin
 from kafka import KafkaProducer
@@ -32,15 +41,10 @@ log = logging.getLogger(__name__)
 # ── Interface discovery ───────────────────────────────────────────────────────
 interfaces = list(psutil.net_if_stats().keys())
 
-# Prefer env var if provided, otherwise pick the first non-loopback interface,
-# otherwise fall back to the first available interface.
 INTERFACE = os.getenv("INTERFACE")
 if not INTERFACE:
     non_loopback = [i for i in interfaces if i != "lo"]
     INTERFACE = non_loopback[0] if non_loopback else (interfaces[0] if interfaces else None)
-
-if not INTERFACE and not os.getenv("PCAP_FILE", ""):
-    raise RuntimeError("No network interface found and no PCAP_FILE provided.")
 
 # ── Configuration from environment ───────────────────────────────────────────
 PCAP_FILE      = os.getenv("PCAP_FILE", "")          # if set, overrides INTERFACE
@@ -49,17 +53,34 @@ TOPIC          = os.getenv("TOPIC", "raw_flows")
 IDLE_TIMEOUT   = int(os.getenv("IDLE_TIMEOUT", "15"))
 ACTIVE_TIMEOUT = int(os.getenv("ACTIVE_TIMEOUT", "120"))
 
+# BPF filter — encrypted traffic only
 BPF_FILTER = os.getenv(
     "BPF_FILTER",
     "tcp port 443 or udp port 443 or tcp port 465 "
     "or tcp port 993 or tcp port 995 or tcp port 853"
 )
 
+if not PCAP_FILE and not INTERFACE:
+    raise RuntimeError("No network interface found and no PCAP_FILE provided.")
+
 # Use PCAP file if provided, otherwise live interface
 SOURCE = PCAP_FILE if PCAP_FILE else INTERFACE
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# NFPlugin — computes features not available from statistical_analysis=True
+# ─────────────────────────────────────────────────────────────────────────────
+
 class ExtendedFlowFeatures(NFPlugin):
+    """
+    Adds per-flow statistics that require per-packet observation:
+      - median inter-arrival time (bidirectional)
+      - TTL mean, std, min, max across all packets
+      - TCP window mean, std, min, max, median
+      - payload size change count per session
+      - TCP window change count per session
+    """
+
     def on_init(self, packet, flow):
         flow.udps.piat_list         = []
         flow.udps.last_seen_ms      = packet.time
@@ -78,6 +99,7 @@ class ExtendedFlowFeatures(NFPlugin):
         flow.udps.payload_changes   = 0
         flow.udps.last_payload_size = packet.payload_size
 
+        # Initialise all output fields so they always exist on expiry
         flow.udps.median_piat_ms     = 0.0
         flow.udps.mean_ttl           = 0.0
         flow.udps.std_ttl            = 0.0
@@ -90,14 +112,17 @@ class ExtendedFlowFeatures(NFPlugin):
         flow.udps.median_window_size = 0.0
 
     def on_update(self, packet, flow):
+        # Inter-arrival time
         iat = packet.time - flow.udps.last_seen_ms
         if iat > 0:
             flow.udps.piat_list.append(iat)
         flow.udps.last_seen_ms = packet.time
 
+        # TTL
         if hasattr(packet, 'ip_ttl') and packet.ip_ttl is not None:
             flow.udps.ttl_list.append(packet.ip_ttl)
 
+        # TCP window
         if hasattr(packet, 'tcp_window') and packet.tcp_window is not None:
             flow.udps.window_list.append(packet.tcp_window)
             if (flow.udps.last_window is not None and
@@ -105,16 +130,19 @@ class ExtendedFlowFeatures(NFPlugin):
                 flow.udps.window_changes += 1
             flow.udps.last_window = packet.tcp_window
 
+        # Payload change count
         if packet.payload_size != flow.udps.last_payload_size:
             flow.udps.payload_changes += 1
         flow.udps.last_payload_size = packet.payload_size
 
     def on_expire(self, flow):
+        # Median IAT
         piats = flow.udps.piat_list
         flow.udps.median_piat_ms = (
             statistics.median(piats) if len(piats) >= 2 else 0.0
         )
 
+        # TTL statistics
         ttls = flow.udps.ttl_list
         if ttls:
             flow.udps.mean_ttl = statistics.mean(ttls)
@@ -122,6 +150,7 @@ class ExtendedFlowFeatures(NFPlugin):
             flow.udps.max_ttl  = float(max(ttls))
             flow.udps.min_ttl  = float(min(ttls))
 
+        # TCP window statistics
         wins = flow.udps.window_list
         if wins:
             flow.udps.mean_window_size   = statistics.mean(wins)
@@ -130,47 +159,62 @@ class ExtendedFlowFeatures(NFPlugin):
             flow.udps.min_window_size    = float(min(wins))
             flow.udps.median_window_size = statistics.median(wins)
 
+        # Free per-packet lists immediately to keep memory bounded
         flow.udps.piat_list   = []
         flow.udps.ttl_list    = []
         flow.udps.window_list = []
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# NFStream column → model feature name mapping
+# ─────────────────────────────────────────────────────────────────────────────
+
 NFSTREAM_TO_MODEL = {
+    # Packet size statistics (bidirectional)
     "bidirectional_mean_ps":      "mean_Length_of_IP_packets",
     "bidirectional_stddev_ps":    "std_Length_of_IP_packets",
     "bidirectional_max_ps":       "max_Length_of_IP_packets",
     "bidirectional_min_ps":       "min_Length_of_IP_packets",
+    # Packet size (src→dst direction)
     "src2dst_mean_ps":            "mean_Length_of_TCP_payload",
     "src2dst_stddev_ps":          "std_Length_of_TCP_payload",
     "src2dst_max_ps":             "max_Length_of_TCP_payload",
     "src2dst_min_ps":             "min_Length_of_TCP_payload",
     "src2dst_bytes":              "Length_of_TCP_payload",
+    # Bidirectional IAT statistics
     "bidirectional_mean_piat_ms":   "mean_Time_difference_between_packets_per_session",
     "bidirectional_stddev_piat_ms": "std_Time_difference_between_packets_per_session",
     "bidirectional_max_piat_ms":    "max_Time_difference_between_packets_per_session",
     "bidirectional_min_piat_ms":    "min_Time_difference_between_packets_per_session",
+    # Forward IAT statistics (src→dst)
     "src2dst_mean_piat_ms":       "mean_Interval_of_arrival_time_of_forward_traffic",
     "src2dst_stddev_piat_ms":     "std_Interval_of_arrival_time_of_forward_traffic",
     "src2dst_max_piat_ms":        "max_Interval_of_arrival_time_of_forward_traffic",
     "src2dst_min_piat_ms":        "min_Interval_of_arrival_time_of_forward_traffic",
+    # Backward IAT statistics (dst→src)
     "dst2src_mean_piat_ms":       "mean_Interval_of_arrival_time_of_backward_traffic",
     "dst2src_stddev_piat_ms":     "std_Interval_of_arrival_time_of_backward_traffic",
     "dst2src_max_piat_ms":        "max_Interval_of_arrival_time_of_backward_traffic",
     "dst2src_min_piat_ms":        "min_Interval_of_arrival_time_of_backward_traffic",
+    # NFPlugin — median IAT
     "udps.median_piat_ms":        "median_Time_difference_between_packets_per_session",
+    # NFPlugin — TTL statistics
     "udps.mean_ttl":              "mean_time_to_live",
     "udps.std_ttl":               "std_time_to_live",
     "udps.max_ttl":               "max_time_to_live",
     "udps.min_ttl":               "min_time_to_live",
+    # NFPlugin — TCP window statistics
     "udps.mean_window_size":      "mean_TCP_windows_size_value",
     "udps.std_window_size":       "std_TCP_windows_size_value",
     "udps.max_window_size":       "max_TCP_windows_size_value",
     "udps.min_window_size":       "min_TCP_windows_size_value",
     "udps.median_window_size":    "median_TCP_windows_size_value",
+    # NFPlugin — change count features
     "udps.payload_changes":       "The_times_of_change_of_payload_per_session",
     "udps.window_changes":        "Change_values_of_TCP_windows_length_per_session",
 }
 
+# Context fields kept alongside model features for SOAR enrichment
 CONTEXT_FIELDS = [
     "src_ip", "dst_ip", "src_port", "dst_port", "protocol",
     "bidirectional_duration_ms", "bidirectional_packets",
@@ -178,6 +222,10 @@ CONTEXT_FIELDS = [
     "requested_server_name",
 ]
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Kafka producer with retry
+# ─────────────────────────────────────────────────────────────────────────────
 
 def make_producer(broker: str, retries: int = 10, delay: int = 5) -> KafkaProducer:
     for attempt in range(1, retries + 1):
@@ -196,9 +244,14 @@ def make_producer(broker: str, retries: int = 10, delay: int = 5) -> KafkaProduc
     raise RuntimeError(f"Could not connect to Kafka at {broker} after {retries} attempts")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Flow → dict conversion
+# ─────────────────────────────────────────────────────────────────────────────
+
 def flow_to_record(flow) -> dict:
     record = {}
 
+    # Model features
     for nf_col, model_col in NFSTREAM_TO_MODEL.items():
         if "." in nf_col:
             attr = nf_col.split(".")[1]
@@ -206,9 +259,11 @@ def flow_to_record(flow) -> dict:
         else:
             record[model_col] = getattr(flow, nf_col, 0.0)
 
+    # Context fields for SOAR enrichment (not used by ML model)
     for field in CONTEXT_FIELDS:
         record[field] = getattr(flow, field, None)
 
+    # Flow ID for tracing through the pipeline
     record["flow_id"] = (
         f"{flow.src_ip}:{flow.src_port}-{flow.dst_ip}:{flow.dst_port}"
         f"-{flow.protocol}-{flow.bidirectional_first_seen_ms}"
@@ -219,11 +274,11 @@ def flow_to_record(flow) -> dict:
 
 
 def main():
-    log.info(f"Available interfaces: {interfaces}")   # NEW
-    log.info(f"Selected source    : {SOURCE}")
-    log.info(f"BPF filter         : {BPF_FILTER}")
-    log.info(f"Kafka broker       : {KAFKA_BROKER}  topic: {TOPIC}")
-    log.info(f"Timeouts           : idle={IDLE_TIMEOUT}s  active={ACTIVE_TIMEOUT}s")
+    log.info(f"Available interfaces: {interfaces}")
+    log.info(f"Source      : {SOURCE}")
+    log.info(f"BPF filter  : {BPF_FILTER}")
+    log.info(f"Kafka broker: {KAFKA_BROKER}  topic: {TOPIC}")
+    log.info(f"Timeouts    : idle={IDLE_TIMEOUT}s  active={ACTIVE_TIMEOUT}s")
 
     producer = make_producer(KAFKA_BROKER)
 
@@ -233,17 +288,20 @@ def main():
         bpf_filter=BPF_FILTER,
         idle_timeout=IDLE_TIMEOUT,
         active_timeout=ACTIVE_TIMEOUT,
-        n_dissections=20,
-        n_meters=0,               # concurrent metering, auto-scales
+        n_dissections=20,           # nDPI dissection depth — identifies TLS, QUIC etc
+        n_meters=0,                 # 0 = auto-scale to available CPU cores
         promiscuous_mode=True,
         udps=ExtendedFlowFeatures(),
-        system_visibility_mode=0,
-        performance_report=60,
+        system_visibility_mode=0,   # no kernel socket probing needed in container
+        performance_report=60,      # log performance stats every 60s
     )
 
     flow_count = 0
     error_count = 0
-    rows = []
+
+    csv_file = "aggregated_flows.csv"
+    df = pd.DataFrame()
+    header_written = os.path.exists(csv_file) and os.path.getsize(csv_file) > 0
 
     log.info("Streaming started — waiting for flows...")
 
@@ -251,7 +309,22 @@ def main():
         try:
             record = flow_to_record(flow)
             producer.send(TOPIC, value=record)
-            rows.append(record)
+
+            # Update DataFrame in real time
+            if df.empty:
+                df = pd.DataFrame([record])
+            else:
+                df.loc[len(df)] = record
+
+            # Append current flow to CSV immediately
+            pd.DataFrame([record]).to_csv(
+                csv_file,
+                mode="a",
+                header=not header_written,
+                index=False
+            )
+            header_written = True
+
             flow_count += 1
 
             if flow_count % 100 == 0:
@@ -264,9 +337,6 @@ def main():
         except Exception as e:
             error_count += 1
             log.warning(f"Failed to publish flow: {e}")
-
-    df = pd.DataFrame(rows)
-    df.to_csv("aggregated_flows.csv", index=False)
 
     producer.flush()
     log.info(f"Streaming complete. Total flows: {flow_count}  errors: {error_count}")
