@@ -64,7 +64,9 @@ if not PCAP_FILE and not INTERFACE:
     raise RuntimeError("No network interface found and no PCAP_FILE provided.")
 
 # Use PCAP file if provided, otherwise live interface
-SOURCE = PCAP_FILE if PCAP_FILE else INTERFACE
+# SOURCE = PCAP_FILE if PCAP_FILE else INTERFACE
+SOURCE = PCAP_FILE if PCAP_FILE else "any"
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
