@@ -1,0 +1,24 @@
+# docker-compose.argus.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Argus experimentation service — run independently of the main pipeline.
+#
+# Usage:
+#   Build:   docker compose -f docker-compose.argus.yml build argus
+#   Shell:   docker compose -f docker-compose.argus.yml run --rm argus bash
+#   Extract: docker compose -f docker-compose.argus.yml run --rm argus \
+#              /app/extract.sh /pcaps/traffic.pcap csv
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  argus:
+    build: ./services/argus
+    container_name: argus_lab
+    volumes:
+      - ./services/argus/pcaps:/pcaps        # drop your PCAP files here
+      - ./services/argus/output:/output      # extracted CSVs/JSON appear here
+    # No network needed for PCAP-mode experimentation
+    # Add below ONLY when testing live capture:
+    # network_mode: host
+    # cap_add: [NET_ADMIN, NET_RAW]
+    stdin_open: true
+    tty: true

@@ -78,6 +78,13 @@ services:
     networks:
       - net
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 2g       
+          cpus: "2.0"
+        reservations:
+          memory: 1g
 
   # ── 4. XAI→Alert Translator ────────────────────────────────────────────────
   translator:

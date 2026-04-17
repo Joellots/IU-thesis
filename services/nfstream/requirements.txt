@@ -1,0 +1,4 @@
+nfstream==6.6.0
+kafka-python-ng==2.2.3
+pandas==2.2.2
+ 
