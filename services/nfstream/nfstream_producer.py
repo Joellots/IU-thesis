@@ -301,9 +301,9 @@ def main():
     flow_count = 0
     error_count = 0
 
-    csv_file = "aggregated_flows.csv"
+    CSV_FILE = os.getenv("CSV_FILE", "/app/generated_flows/aggregated_flows.csv")
     df = pd.DataFrame()
-    header_written = os.path.exists(csv_file) and os.path.getsize(csv_file) > 0
+    header_written = os.path.exists(CSV_FILE) and os.path.getsize(CSV_FILE) > 0
 
     log.info("Streaming started — waiting for flows...")
 
@@ -320,7 +320,7 @@ def main():
 
             # Append current flow to CSV immediately
             pd.DataFrame([record]).to_csv(
-                csv_file,
+                CSV_FILE,
                 mode="a",
                 header=not header_written,
                 index=False

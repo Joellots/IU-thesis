@@ -41,18 +41,19 @@ services:
   nfstream:
     build: ./services/nfstream
     container_name: xai_nfstream
-    # REQUIRED for host interface access — container shares host network stack
     network_mode: host
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    volumes:
+      - ./services/nfstream/output:/app/generated_flows
     environment:
-      # INTERFACE: all            # your interface name
-      KAFKA_BROKER: localhost:9094   # localhost because network_mode: host
+      KAFKA_BROKER: localhost:9094
       TOPIC: raw_flows
       BPF_FILTER: "tcp port 443 or udp port 443 or tcp port 465 or tcp port 993 or tcp port 995 or tcp port 853"
       IDLE_TIMEOUT: 15
       ACTIVE_TIMEOUT: 120
+      CSV_FILE: /app/generated_flows/aggregated_flows.csv
     depends_on:
       - kafka
     restart: on-failure
