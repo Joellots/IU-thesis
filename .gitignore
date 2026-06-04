@@ -6,4 +6,4 @@ pcaps/
 models/
 eval_results/
 aggregated_flows.csv
-services/nfstream/output/
+services/nfstream/output/*
