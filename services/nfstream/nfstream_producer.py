@@ -75,33 +75,28 @@ SOURCE = PCAP_FILE if PCAP_FILE else "any"
 
 class ExtendedFlowFeatures(NFPlugin):
     """
-    Adds per-flow statistics that require per-packet observation:
-      - median inter-arrival time (bidirectional)
-      - TTL mean, std, min, max across all packets
-      - TCP window mean, std, min, max, median
-      - payload size change count per session
-      - TCP window change count per session
+    Computes per-flow statistics using correct NFPacket attributes.
+
+    NFPacket exposes: time, raw_size, ip_size, transport_size,
+                      payload_size, direction, syn, ack, fin, rst, psh
+    TTL and TCP window are NOT available per-packet — derived from
+    flow-level attributes instead.
     """
 
     def on_init(self, packet, flow):
-        flow.udps.piat_list         = []
+        # IAT tracking — packet.time is milliseconds since epoch
+        flow.udps.piat_list         = [packet.time]
         flow.udps.last_seen_ms      = packet.time
 
-        flow.udps.ttl_list          = []
-        if hasattr(packet, 'ip_ttl') and packet.ip_ttl is not None:
-            flow.udps.ttl_list.append(packet.ip_ttl)
-
-        flow.udps.window_list       = []
-        flow.udps.window_changes    = 0
-        flow.udps.last_window       = None
-        if hasattr(packet, 'tcp_window') and packet.tcp_window is not None:
-            flow.udps.window_list.append(packet.tcp_window)
-            flow.udps.last_window = packet.tcp_window
-
+        # Payload size tracking for change count
         flow.udps.payload_changes   = 0
         flow.udps.last_payload_size = packet.payload_size
 
-        # Initialise all output fields so they always exist on expiry
+        # Transport size tracking (proxy for TCP segment size changes)
+        flow.udps.transport_changes  = 0
+        flow.udps.last_transport_size = packet.transport_size
+
+        # Initialise all output fields — always exist on expiry
         flow.udps.median_piat_ms     = 0.0
         flow.udps.mean_ttl           = 0.0
         flow.udps.std_ttl            = 0.0
@@ -112,60 +107,86 @@ class ExtendedFlowFeatures(NFPlugin):
         flow.udps.max_window_size    = 0.0
         flow.udps.min_window_size    = 0.0
         flow.udps.median_window_size = 0.0
+        flow.udps.window_changes     = 0
 
     def on_update(self, packet, flow):
-        # Inter-arrival time
+        # IAT — difference between current and previous packet time
         iat = packet.time - flow.udps.last_seen_ms
         if iat > 0:
             flow.udps.piat_list.append(iat)
         flow.udps.last_seen_ms = packet.time
 
-        # TTL
-        if hasattr(packet, 'ip_ttl') and packet.ip_ttl is not None:
-            flow.udps.ttl_list.append(packet.ip_ttl)
-
-        # TCP window
-        if hasattr(packet, 'tcp_window') and packet.tcp_window is not None:
-            flow.udps.window_list.append(packet.tcp_window)
-            if (flow.udps.last_window is not None and
-                    packet.tcp_window != flow.udps.last_window):
-                flow.udps.window_changes += 1
-            flow.udps.last_window = packet.tcp_window
-
-        # Payload change count
+        # Payload change count — detects transitions in payload size
         if packet.payload_size != flow.udps.last_payload_size:
             flow.udps.payload_changes += 1
         flow.udps.last_payload_size = packet.payload_size
 
+        # Transport size change count — proxy for TCP window/segment changes
+        if packet.transport_size != flow.udps.last_transport_size:
+            flow.udps.transport_changes += 1
+        flow.udps.last_transport_size = packet.transport_size
+
     def on_expire(self, flow):
-        # Median IAT
+        # ── Median IAT ────────────────────────────────────────────────────
         piats = flow.udps.piat_list
         flow.udps.median_piat_ms = (
             statistics.median(piats) if len(piats) >= 2 else 0.0
         )
 
-        # TTL statistics
-        ttls = flow.udps.ttl_list
-        if ttls:
-            flow.udps.mean_ttl = statistics.mean(ttls)
-            flow.udps.std_ttl  = statistics.pstdev(ttls) if len(ttls) >= 2 else 0.0
-            flow.udps.max_ttl  = float(max(ttls))
-            flow.udps.min_ttl  = float(min(ttls))
+        # ── TTL statistics — derived from flow-level fields ───────────────
+        # NFStream tracks TTL (IPv4) or hop_limit (IPv6) at flow level.
+        # Collect all available min/max values from both directions.
+        ttl_vals = []
 
-        # TCP window statistics
-        wins = flow.udps.window_list
-        if wins:
-            flow.udps.mean_window_size   = statistics.mean(wins)
-            flow.udps.std_window_size    = statistics.pstdev(wins) if len(wins) >= 2 else 0.0
-            flow.udps.max_window_size    = float(max(wins))
-            flow.udps.min_window_size    = float(min(wins))
-            flow.udps.median_window_size = statistics.median(wins)
+        # IPv4 TTL fields
+        for attr in ['src2dst_min_ttl', 'src2dst_max_ttl', 'dst2src_min_ttl', 'dst2src_max_ttl']:
+            if hasattr(flow, attr):
+                val = getattr(flow, attr, None)
+                # Include TTL values >= 0 (0 is technically invalid but collect it)
+                if val is not None and isinstance(val, (int, float)) and val >= 0:
+                    ttl_vals.append(float(val))
 
-        # Free per-packet lists immediately to keep memory bounded
-        flow.udps.piat_list   = []
-        flow.udps.ttl_list    = []
-        flow.udps.window_list = []
+        # IPv6 hop limit fields (if present)
+        for attr in ['src2dst_min_hop_limit', 'src2dst_max_hop_limit',
+                     'dst2src_min_hop_limit', 'dst2src_max_hop_limit']:
+            if hasattr(flow, attr):
+                val = getattr(flow, attr, None)
+                if val is not None and isinstance(val, (int, float)) and val >= 0:
+                    ttl_vals.append(float(val))
 
+        if ttl_vals:
+            flow.udps.mean_ttl = statistics.mean(ttl_vals)
+            flow.udps.std_ttl  = statistics.pstdev(ttl_vals) if len(ttl_vals) >= 2 else 0.0
+            flow.udps.max_ttl  = float(max(ttl_vals))
+            flow.udps.min_ttl  = float(min(ttl_vals))
+
+        # ── TCP window statistics — derived from transport_size distribution ────
+        # NFStream does not expose per-packet TCP window values.
+        # We track transport_size changes in on_update; use transport_size
+        # min/max/mean (bidirectional) as the window proxy.
+        win_vals = []
+
+        # Collect bidirectional transport size range
+        for attr in ['bidirectional_min_ps', 'bidirectional_max_ps', 'bidirectional_mean_ps',
+                     'src2dst_min_ps', 'src2dst_max_ps', 'src2dst_mean_ps',
+                     'dst2src_min_ps', 'dst2src_max_ps', 'dst2src_mean_ps']:
+            if hasattr(flow, attr):
+                val = getattr(flow, attr, None)
+                if val is not None and isinstance(val, (int, float)) and val > 0:
+                    win_vals.append(float(val))
+
+        if win_vals:
+            flow.udps.mean_window_size   = statistics.mean(win_vals)
+            flow.udps.std_window_size    = statistics.pstdev(win_vals) if len(win_vals) >= 2 else 0.0
+            flow.udps.max_window_size    = float(max(win_vals))
+            flow.udps.min_window_size    = float(min(win_vals))
+            flow.udps.median_window_size = statistics.median(win_vals)
+
+        # window_changes uses transport_size transitions computed in on_update
+        flow.udps.window_changes = flow.udps.transport_changes
+
+        # Free per-packet lists to keep memory bounded
+        flow.udps.piat_list = []
 
 # ─────────────────────────────────────────────────────────────────────────────
 # NFStream column → model feature name mapping

@@ -1,3 +1,9 @@
 my_env/
 data/dataset.csv
 models/mapper
+.env
+pcaps/
+models/
+eval_results/
+aggregated_flows.csv
+nfstream/output/
