@@ -77,11 +77,20 @@ Four classes for the retraining corpus. Selection criteria: present in the origi
 | # | Class | MITRE TTPs | Source dataset | PCAP status | NFStream signature |
 |---|---|---|---|---|---|
 | 1 | Encrypted C2 beaconing | T1071.001, T1573 | MCFP/CTU-13 (Neris, Virut) | ✅ have `botnet42/43/53/54` | low backward-IAT variance (regular timing) |
-| 2 | HTTPS exfiltration | T1041, **T1048.002 (unmapped)** | CICIDS-2017 Thursday / UNSW-NB15 backdoor | ❌ **source (public)** | high payload-change count + high pkt-length variance |
+| 2 | HTTPS exfiltration (minority class) | T1041, **T1048.002 (unmapped)** | Train: T1041-over-C2 (bingowens+ransomware)+Lumma · Test: CICIDS-36+MTA | ✅ hybrid (see below) | high payload-change count + high pkt-length variance |
 | 3 | Encrypted scan/recon | **T1046 (unmapped)**, T1071 | IoT-23 (Mirai) | ✅ have `iot23_mirai_cap1/3` (cap ≤10% of train flows) | short, unidirectional, zero-backward |
-| 4 | Ransomware C2 | T1071, **T1486 (unmapped)** | Stratosphere/MCFP ransomware (WannaCry/Locky/Cerber) | ❌ **source** | encrypted C2 + bursty bulk encryption traffic |
+| 4 | Ransomware C2 | T1071, **T1486 (unmapped)** | Stratosphere/MCFP ransomware | ✅ have Cerber-190, Locky-214, WannaCry-252 | encrypted C2 + bursty bulk encryption traffic |
 
-**Decision notes:** exfil sourced from public PCAPs (not self-generated) for external validity; ransomware C2 added as a 4th for a stronger high-severity SOAR demo. T1048.002, T1046, T1486 are **not yet** in `feature_mitre_map.py` — add during step 7.
+**Decision notes:** ransomware C2 added as a 4th for a stronger high-severity SOAR demo. T1048.002, T1046, T1486 are **not yet** in `feature_mitre_map.py` — add during step 7.
+
+**Class 2 exfil — sourcing finding (2026-06-10):** downloaded CICIDS-2017 Thursday via the gated portal (token). The Infiltration scenario yields **only 36 malicious flows** (288,566 benign in the same capture) — a known CICIDS limitation, far too few to *train* a class. Outcome is inverted from expectation:
+- The 7.8 GB `pcaps/cicids2017/cicids2017_thursday_full.pcap` is a **mixed full-day capture** (label per-5-tuple via `data/cicids2017_labels/*.csv`, NOT by directory). Its real value is **~456k high-quality benign corporate-TLS flows** + the **36 infiltration flows as a real-world external-validity TEST set**.
+- **Exfil training volume — THREE public sources tested, all sparse (2026-06-10):**
+  1. CICIDS-2017 Thursday: **36** infiltration flows (have the 7.8 GB capture).
+  2. CSE-CIC-IDS2018 infiltration: 62k flows but locked in **~50 GB** daily pcap.zip on public S3 (`s3://cse-cic-ids2018`, list via REST `https://cse-cic-ids2018.s3.ca-central-1.amazonaws.com/?list-type=2`) — impractical here.
+  3. malware-traffic-analysis.net stealers (pw `infected_YYYYMMDD`): **3–22 flows per pcap**, and StealC/RedLine exfil over HTTP not HTTPS; only Lumma uses HTTPS (~4–5 true C2 flows/pcap after excluding benign GitHub/MS CDN). 3 samples staged in `pcaps/mta_stealers/` (mixed → per-flow label needed).
+  **Finding:** real HTTPS exfil is an inherently *sparse/minority* class in public data — a defensible thesis observation, not a tooling failure.
+  **DECISION (2026-06-10): hybrid.** Train exfil as a **minority class** via T1041 exfil-over-C2 (bingowens, already in corpus, + the ransomware captures which exfil host data/keys over HTTPS) augmented with the Lumma HTTPS flows. **Test/validate** on the 36 CICIDS infiltration flows + held-out MTA stealer flows ("validated on independent real-world exfiltration traffic"). **Document** the sparsity as a finding; self-generation noted as future work for controlled volume.
 
 ---
 

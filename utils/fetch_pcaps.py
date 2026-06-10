@@ -299,6 +299,59 @@ PCAP_CATALOG = [
         "mitre_ttps":   ["T1071"],
     },
 
+    # ── MALICIOUS — RANSOMWARE C2 (attack class 4) ───────────────────────────
+    # Encrypted/HTTP(S) C2 from real ransomware infections. T1486 (Data
+    # Encrypted for Impact) + T1071 C2. Sourced from Stratosphere/MCFP.
+
+    {
+        "name":         "ctu_cerber_190_ransomware_c2",
+        "label":        "malicious",
+        "source":       "CTU-Ransomware",
+        "attack_type":  "ransomware_c2",
+        "tls_priority": "high",
+        "description":  "CTU Botnet-190-1: Cerber ransomware (via trojanised Ammyy "
+                        "Remote Admin). HTTP/HTTPS C2 with mitm-intercepted web traffic. "
+                        "Small, clean — primary ransomware-C2 sample.",
+        "url":          f"{_MCFP}/CTU-Malware-Capture-Botnet-190-1/"
+                        "2016-09-28_capture_win17.pcap",
+        "filename":     "ctu_cerber_190_ransomware_c2.pcap",
+        "size_mb":      14,
+        "compressed":   False,
+        "mitre_ttps":   ["T1486", "T1071.001", "T1573"],
+    },
+    {
+        "name":         "ctu_locky_214_ransomware_c2",
+        "label":        "malicious",
+        "source":       "CTU-Ransomware",
+        "attack_type":  "ransomware_c2",
+        "tls_priority": "high",
+        "description":  "CTU Botnet-214-1: Trojan.Locky ransomware. HTTP/HTTPS C2 with "
+                        "mitm.weblog documenting encrypted web traffic. Larger capture "
+                        "with sustained C2 sessions.",
+        "url":          f"{_MCFP}/CTU-Malware-Capture-Botnet-214-1/"
+                        "2016-12-30_win12.pcap",
+        "filename":     "ctu_locky_214_ransomware_c2.pcap",
+        "size_mb":      259,
+        "compressed":   False,
+        "mitre_ttps":   ["T1486", "T1071.001", "T1573"],
+    },
+    {
+        "name":         "ctu_wannacry_252_ransomware",
+        "label":        "malicious",
+        "source":       "CTU-Ransomware",
+        "attack_type":  "ransomware_propagation",
+        "tls_priority": "low",
+        "description":  "CTU Botnet-252-1: WannaCry — reached killswitch (no file "
+                        "encryption) but still attempted network propagation. Small "
+                        "named-family sample; traffic is SMB/scan-heavy, not HTTPS.",
+        "url":          f"{_MCFP}/CTU-Malware-Capture-Botnet-252-1/"
+                        "2017-05-14_win10.pcap",
+        "filename":     "ctu_wannacry_252_ransomware.pcap",
+        "size_mb":      1,
+        "compressed":   False,
+        "mitre_ttps":   ["T1486", "T1210", "T1071"],
+    },
+
     # ── BENIGN — HIGH TLS PRIORITY ────────────────────────────────────────────
     # Windows machines with real-world HTTPS/TLS browsing traffic
 
