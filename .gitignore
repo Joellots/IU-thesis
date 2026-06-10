@@ -1,7 +1,6 @@
 .env/
 data/
-eval_results/
-eval_results_fixed/
+eval_results*
 models/
 pcaps/
 */__pycache__
