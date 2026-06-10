@@ -59,7 +59,9 @@ log = logging.getLogger(__name__)
 class ExtendedFlowFeatures(NFPlugin):
 
     def on_init(self, packet, flow):
-        flow.udps.piat_list           = [packet.time]
+        # piat_list holds *relative* inter-arrival times only; MUST start empty.
+        # Seeding with the absolute epoch timestamp corrupts median_piat_ms.
+        flow.udps.piat_list           = []
         flow.udps.last_seen_ms        = packet.time
         flow.udps.payload_changes     = 0
         flow.udps.last_payload_size   = packet.payload_size
@@ -94,9 +96,10 @@ class ExtendedFlowFeatures(NFPlugin):
         flow.udps.last_transport_size = packet.transport_size
 
     def on_expire(self, flow):
+        # >= 1: a single IAT has a well-defined median; only 1-packet flows → 0.0
         piats = flow.udps.piat_list
         flow.udps.median_piat_ms = (
-            statistics.median(piats) if len(piats) >= 2 else 0.0
+            statistics.median(piats) if len(piats) >= 1 else 0.0
         )
 
         # ── TTL statistics — derived from flow-level fields ───────────────
@@ -276,6 +279,85 @@ def extract_all_pcaps(
     df = pd.concat(frames, ignore_index=True)
     log.info(f"Total flows extracted: {len(df)}")
     return df
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Balancing / subsampling
+# ─────────────────────────────────────────────────────────────────────────────
+
+def balance_flows(
+    df: pd.DataFrame,
+    min_packets: int = 0,
+    max_per_pcap: int = 0,
+    balance: bool = False,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """
+    Produce a statistically honest evaluation subset.
+
+    The raw extraction is dominated by one 625k-flow scan PCAP and a 24:1
+    malicious:benign ratio, which makes aggregate metrics meaningless. This
+    applies, in order:
+
+      1. min_packets   — drop flows with fewer than N bidirectional packets
+                         (removes 1–3-packet scan/probe flows that carry no
+                         backward-IAT / payload-change signal).
+      2. max_per_pcap  — randomly cap each PCAP's contribution to N flows, so
+                         no single capture dominates the distribution.
+      3. balance       — downsample the majority class to match the minority,
+                         giving a 1:1 malicious:benign set for macro metrics.
+
+    All sampling uses `seed` for reproducibility. Flows with no true_label
+    (exploration mode) are passed through untouched by the balance step.
+    """
+    if not any([min_packets, max_per_pcap, balance]):
+        return df
+
+    n_start = len(df)
+    log.info("\n" + "═" * 60)
+    log.info(" Balancing / subsampling")
+    log.info("═" * 60)
+
+    # 1 ── minimum packet filter (bidirectional, multi-packet flows only)
+    if min_packets and "bidirectional_packets" in df.columns:
+        before = len(df)
+        df = df[df["bidirectional_packets"].fillna(0) >= min_packets]
+        log.info(f"  min_packets >= {min_packets}: {before} → {len(df)} flows")
+    elif min_packets:
+        log.warning("  min_packets requested but 'bidirectional_packets' column absent — skipped")
+
+    # 2 ── cap flows per source PCAP
+    if max_per_pcap and "pcap_source" in df.columns:
+        before = len(df)
+        df = (
+            df.groupby("pcap_source", group_keys=False)
+              .apply(lambda g: g.sample(n=min(len(g), max_per_pcap), random_state=seed))
+        )
+        log.info(f"  max_per_pcap = {max_per_pcap}: {before} → {len(df)} flows")
+
+    # 3 ── balance classes (downsample majority to minority)
+    if balance and "true_label" in df.columns:
+        labelled = df[df["true_label"].notna()]
+        counts = labelled["true_label"].value_counts().to_dict()
+        if len(counts) >= 2:
+            target = int(min(counts.values()))
+            parts = [
+                grp.sample(n=target, random_state=seed)
+                for _, grp in labelled.groupby("true_label")
+            ]
+            balanced = pd.concat(parts, ignore_index=True)
+            # keep any unlabelled rows alongside the balanced labelled set
+            unlabelled = df[df["true_label"].isna()]
+            df = pd.concat([balanced, unlabelled], ignore_index=True)
+            log.info(f"  balance: {counts} → {target} per class ({len(balanced)} labelled flows)")
+        else:
+            log.warning(f"  balance requested but only one class present ({counts}) — skipped")
+
+    log.info(f"\n  Subset: {n_start} → {len(df)} flows")
+    if "true_label" in df.columns:
+        log.info(f"  Final class counts: {df['true_label'].value_counts().to_dict()}")
+    log.info(f"  Final per-PCAP counts:\n{df['pcap_source'].value_counts().to_string()}")
+    return df.reset_index(drop=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -477,6 +559,17 @@ def main():
                         help="Path to mapper.joblib")
     parser.add_argument("--output",    default="eval_results",
                         help="Output directory for reports (default: eval_results)")
+    parser.add_argument("--min-packets", type=int, default=0,
+                        help="Drop flows with fewer than N bidirectional packets "
+                             "(filters out 1–3-packet scan/probe flows). Default: 0 (off)")
+    parser.add_argument("--max-flows-per-pcap", type=int, default=0,
+                        help="Randomly cap each PCAP's contribution to N flows so no "
+                             "single capture dominates. Default: 0 (off)")
+    parser.add_argument("--balance", action="store_true",
+                        help="Downsample the majority class to match the minority "
+                             "for a 1:1 malicious:benign evaluation set")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for subsampling (default: 42)")
     args = parser.parse_args()
 
     if not args.benign and not args.malicious and not args.pcap:
@@ -492,6 +585,19 @@ def main():
 
     if df.empty:
         log.error("No flows extracted — check PCAP files and NFStream installation")
+        sys.exit(1)
+
+    # Balance / subsample for honest metrics
+    df = balance_flows(
+        df,
+        min_packets=args.min_packets,
+        max_per_pcap=args.max_flows_per_pcap,
+        balance=args.balance,
+        seed=args.seed,
+    )
+
+    if df.empty:
+        log.error("No flows left after balancing — relax --min-packets / --max-flows-per-pcap")
         sys.exit(1)
 
     log.info(f"\nDataFrame shape: {df.shape}")

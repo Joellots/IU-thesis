@@ -27,42 +27,61 @@ The downstream aim is an end-to-end demo: live/simulated encrypted traffic → N
 
 ### Evaluation result (the headline)
 
-Aggregate (RandomForest `rf_best` on the 9 `BEST_FEATURES`):
-- Accuracy **0.9478**, F1 macro **0.5540**, ROC-AUC **0.5676**
-- Confusion: TP=888,698 FP=33,575 TN=3,833 FN=15,566
+Two runs exist. RandomForest `rf_best` on the 9 `BEST_FEATURES`.
 
-**Real interpretation — high sensitivity, near-zero specificity.** The model detects malicious traffic well (94–100% TP per malicious PCAP) but flags **80–99% of benign flows as malicious**. The aggregate accuracy is an artefact of a 24:1 malicious:benign class imbalance in the evaluation set. Per-PCAP false-positive rates on benign:
+**Run 1 — raw, unbalanced, pre-bugfix (`eval_results/`, superseded):** 941,672 flows at 24:1 malicious:benign. Accuracy 0.9478, F1 macro 0.5540, ROC-AUC 0.5676, benign recall 0.10. The high accuracy is purely a class-imbalance artefact.
 
-| Benign PCAP | flows | predicted malicious |
-|---|---|---|
-| `ctu_normal7_general_2013` | 2,663 | 98.6% |
-| `ctu_normal20_win_2017_https` | 18,700 | 92.2% |
-| `ctu_normal21_kali_2017` | 10,486 | 88.0% |
-| `ctu_normal14_win_full_2017` | 5,559 | 80.6% |
+**Run 2 — bug-fixed + balanced (`eval_results_fixed/`, current baseline):**
+flags `--min-packets 4 --max-flows-per-pcap 8000 --balance`; 32,654 flows (16,327/class).
+- Accuracy **0.5802**, F1 macro **0.5174**, **ROC-AUC 0.8057**
+- Benign: precision 0.79, recall 0.22 · Malicious: precision 0.55, recall 0.94
+- Confusion: TP=15,362 FP=12,744 TN=3,583 FN=965
 
-This is **not** "everything zeroed / everything broken." It is a genuine feature-distribution shift: the benign decision boundary learned on dpkt/scapy features does not hold under NFStream semantics. Conclusion: **retrain on NFStream-extracted data.**
+**Interpretation — the model has signal but is mis-thresholded, not blind.** ROC-AUC rose 0.57→**0.81** after the median_piat fix + balancing: the probability scores *do* rank malicious above benign. The default 0.5 cutoff makes it over-predict malicious (high sensitivity, low specificity). Threshold sweep on the balanced subset:
+
+| Threshold | F1 macro | Benign recall | Malicious recall |
+|---|---|---|---|
+| 0.50 (default) | 0.515 | 0.22 | 0.94 |
+| **0.70 (optimal)** | **0.735** | 0.70 | 0.77 |
+| 0.90 | 0.333 | 1.00 | 0.00 (no flow scores ≥0.9) |
+
+**Conclusion:** recalibrating 0.5→0.7 alone lifts macro-F1 0.52→0.74 (part of the shift is recoverable calibration); the residual gap to the 0.90 target is genuine distribution shift → **retrain on NFStream-extracted features.** The calibration-vs-shift decomposition is itself a defensible thesis result.
 
 ---
 
 ## In Progress (exactly where it stands)
 
-- **NFStream live-capture service** (`services/nfstream/nfstream_producer.py`): code complete, builds, runs in PCAP and live (`source="any"`) modes, publishes to Kafka and writes CSV. Two extraction defects remain unfixed (see *Gotchas*) — these must be corrected **before** generating any retraining dataset, because they corrupt `median_Time_difference_between_packets_per_session` and zero out `std_time_to_live`.
-- **Retraining decision:** made in principle (retrain). Not started. Attack-class scope drafted (C2 beaconing, HTTPS exfiltration, encrypted scan/recon) but not finalised.
+- **NFStream live-capture service** (`services/nfstream/nfstream_producer.py`): code complete, builds, runs in PCAP and live (`source="any"`) modes, publishes to Kafka and writes CSV. **piat_list epoch bug FIXED** (2026-06-10) in both the producer and the eval script — verified on `iot23_capture8`: `median_piat_ms` max 4,081 ms (was ~7.7e11), 99.5% nonzero. `std_time_to_live` is flagged in code but still computed for current-mapper compatibility; it gets dropped at retraining, not before. **Action pending: re-run the extensive eval so the baseline reflects the corrected median IAT feature** (the committed `eval_results/` were generated with the bug).
+- **Retraining decision:** made (retrain), justification quantified by the threshold analysis. Not started. **Attack classes FINALISED at four** (2026-06-10) — see *Attack Classes* below.
 - **TheHive/Cortex SOAR integration:** not in this repo. A separate `origin/soar` branch (commit `53be3d7` "SOAR base") holds the start of it; being implemented by co-author Isaac Womoakor. The translator service has **no** TheHive API code yet — Joel's integration point (publish HIGH-severity alerts → TheHive case) is still to be written.
 
 ---
 
 ## Next Steps (ordered)
 
-1. **Fix the two NFStream extraction bugs** in `services/nfstream/nfstream_producer.py` (and the mirrored logic in `utils/nfstream_model_eval.py`):
-   - `on_init` (line 88): change `flow.udps.piat_list = [packet.time]` → `[]` so the absolute epoch timestamp doesn't contaminate the median IAT.
-   - Drop `std_time_to_live` from the feature set — it is structurally 0 under NFStream (min==max for fixed-TTL OSes). Replace with an NFStream-computable signal during retraining.
-2. **Finalise attack classes** for the retraining corpus. Each must be: in the original source datasets, mappable to a TTP already in `feature_mitre_map.py`, lab-simulatable for end-to-end testing, and productive of non-zero NFStream features. Working set: **(a) encrypted C2 beaconing** (CTU-13 Neris/Virut PCAPs already downloaded), **(b) HTTPS exfiltration** (need to acquire/self-generate), **(c) encrypted scan/recon** (IoT-23 Mirai PCAPs already downloaded — cap at ≤10% of training flows).
-3. **Build the NFStream-extracted training dataset** from PCAPs using the (fixed) `ExtendedFlowFeatures` plugin. Filter to bidirectional, multi-packet, port-443/TLS sessions; aim for 1:1–2:1 class balance at the flow level.
-4. **Retrain** RF / XGBoost / EBM using `utils/usbereit-xai-for-encrypted-https-traffic-anomaly-detection-MAIN.ipynb` as the template; update `REALTIME_SAFE_FEATURES` / `BEST_FEATURES`; re-serialise `mapper`.
-5. **Re-run** `utils/nfstream_model_eval.py` on a **balanced** hold-out to confirm benign specificity recovers (target benign F1 ≫ 0.13).
-6. **Update `feature_mitre_map.py`** once the new `BEST_FEATURES` and SHAP rankings are known — *later-stage, do not start until step 5 confirms the new feature set.*
-7. **Wire the TheHive API call** into `translator_service.py` for HIGH-severity alerts.
+1. **[DONE 2026-06-10] Fix the NFStream extraction bug + add eval balancing + re-run baseline.** piat_list now seeds `[]`; median guard `>= 1`; `std_time_to_live` flagged for drop-at-retrain (both `nfstream_producer.py` and `nfstream_model_eval.py`). Added `--min-packets / --max-flows-per-pcap / --balance / --seed` to the eval. Corrected balanced baseline in `eval_results_fixed/` (ROC-AUC 0.81; see *Evaluation result*).
+2. **[DONE 2026-06-10] Attack classes finalised at four** — see *Attack Classes* below.
+3. **Source the two missing classes' PCAPs** — HTTPS exfiltration (public: CICIDS-2017 Thursday / UNSW-NB15 backdoor) and ransomware C2 (Stratosphere/MCFP ransomware captures, e.g. WannaCry/Locky/Cerber). Add entries to `utils/fetch_pcaps.py` and download.
+4. **Build the NFStream-extracted training dataset** from PCAPs using the (fixed) `ExtendedFlowFeatures` plugin. Filter to bidirectional, multi-packet, port-443/TLS sessions; stratified downsample to ~equal flows per (class, attack_type), ~1:1 malicious:benign.
+5. **Retrain** RF / XGBoost / EBM using `utils/usbereit-xai-for-encrypted-https-traffic-anomaly-detection-MAIN.ipynb` as the template; update `REALTIME_SAFE_FEATURES` / `BEST_FEATURES`; re-serialise `mapper`.
+6. **Re-run** `utils/nfstream_model_eval.py --balance` on a hold-out to confirm specificity recovers (target macro-F1 ≥ 0.90).
+7. **Validate & ground the feature→MITRE mapping** in `feature_mitre_map.py` — *the headline thesis result.* Ground each mapping in literature AND prove it experimentally (SHAP rankings of the retrained model + per-class feature signatures) so the mapping is reliable enough to serve as ground truth. Add the currently-unmapped TTPs (T1048.002, T1046, T1486). Do after step 6 fixes the feature set.
+8. **Wire the TheHive API call** into `translator_service.py` for HIGH-severity alerts.
+
+---
+
+## Attack Classes (finalised 2026-06-10)
+
+Four classes for the retraining corpus. Selection criteria: present in the original source datasets, mappable to ATT&CK TTPs, lab-simulatable for end-to-end testing, and productive of *distinct* non-zero NFStream feature signatures (so the binary boundary isn't overfit to one behaviour).
+
+| # | Class | MITRE TTPs | Source dataset | PCAP status | NFStream signature |
+|---|---|---|---|---|---|
+| 1 | Encrypted C2 beaconing | T1071.001, T1573 | MCFP/CTU-13 (Neris, Virut) | ✅ have `botnet42/43/53/54` | low backward-IAT variance (regular timing) |
+| 2 | HTTPS exfiltration | T1041, **T1048.002 (unmapped)** | CICIDS-2017 Thursday / UNSW-NB15 backdoor | ❌ **source (public)** | high payload-change count + high pkt-length variance |
+| 3 | Encrypted scan/recon | **T1046 (unmapped)**, T1071 | IoT-23 (Mirai) | ✅ have `iot23_mirai_cap1/3` (cap ≤10% of train flows) | short, unidirectional, zero-backward |
+| 4 | Ransomware C2 | T1071, **T1486 (unmapped)** | Stratosphere/MCFP ransomware (WannaCry/Locky/Cerber) | ❌ **source** | encrypted C2 + bursty bulk encryption traffic |
+
+**Decision notes:** exfil sourced from public PCAPs (not self-generated) for external validity; ransomware C2 added as a 4th for a stronger high-severity SOAR demo. T1048.002, T1046, T1486 are **not yet** in `feature_mitre_map.py` — add during step 7.
 
 ---
 
@@ -83,7 +102,7 @@ This is **not** "everything zeroed / everything broken." It is a genuine feature
 
 ## Gotchas / Things That Didn't Work
 
-- **`piat_list` seeded with an absolute timestamp.** `on_init` does `piat_list = [packet.time]`; later packets append *relative* IATs. For a 2-packet flow the median ≈ epoch/2 → `median_Time_difference_between_packets_per_session` shows ~52-billion-ms values (≈48% of flows affected). **Must fix before retraining.**
+- **`piat_list` seeded with an absolute timestamp. [FIXED 2026-06-10]** `on_init` did `piat_list = [packet.time]`; later packets append *relative* IATs, so a 2-packet flow medianed over `[epoch_ms, iat]` → ~52-billion-ms values (≈48% of flows). Fixed by seeding `[]` and relaxing the median guard to `>= 1`. Verified: max dropped from ~7.7e11 ms to ~4,081 ms, nonzero rate 52%→99.5%. **Note: the committed `eval_results/` predate this fix — re-run before trusting the baseline.**
 - **`std_time_to_live` is structurally 0 (100% of flows).** NFStream exposes only flow-level `src2dst_min/max_ttl`; modern OSes use a fixed initial TTL so min==max → std=0. The earlier "derive TTL from flow-level attrs" fix was applied but cannot rescue *variance*. Drop the feature.
 - **Evaluation class imbalance hides the real story.** 66% of eval flows come from one 625K-flow Mirai scan PCAP. Aggregate accuracy (0.95) looks fine; benign F1 (0.13) is the truth. Always evaluate on a balanced, bidirectional, multi-packet subset.
 - **Scan/probe PCAPs are nearly all 1–3-packet unidirectional flows** → `backward_IAT`, `payload_changes`, `std_IP_packet_length` all 0. They're correctly classed as malicious but contribute nothing to the benign/malicious boundary and skew distributions. Cap their share of any training set.

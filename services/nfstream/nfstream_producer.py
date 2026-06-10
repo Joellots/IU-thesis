@@ -84,8 +84,13 @@ class ExtendedFlowFeatures(NFPlugin):
     """
 
     def on_init(self, packet, flow):
-        # IAT tracking — packet.time is milliseconds since epoch
-        flow.udps.piat_list         = [packet.time]
+        # IAT tracking — packet.time is milliseconds since epoch.
+        # piat_list holds *relative* inter-arrival times only; it MUST start
+        # empty. Seeding it with the absolute epoch timestamp corrupts
+        # median_piat_ms (a 2-packet flow would otherwise median over
+        # [epoch_ts, iat] ≈ 5e10 ms). The first real IAT is appended in
+        # on_update against last_seen_ms (set below).
+        flow.udps.piat_list         = []
         flow.udps.last_seen_ms      = packet.time
 
         # Payload size tracking for change count
@@ -128,9 +133,11 @@ class ExtendedFlowFeatures(NFPlugin):
 
     def on_expire(self, flow):
         # ── Median IAT ────────────────────────────────────────────────────
+        # >= 1: a single inter-arrival time has a well-defined median; only
+        # 1-packet flows (no IAT at all) fall back to 0.0.
         piats = flow.udps.piat_list
         flow.udps.median_piat_ms = (
-            statistics.median(piats) if len(piats) >= 2 else 0.0
+            statistics.median(piats) if len(piats) >= 1 else 0.0
         )
 
         # ── TTL statistics — derived from flow-level fields ───────────────
@@ -156,6 +163,10 @@ class ExtendedFlowFeatures(NFPlugin):
 
         if ttl_vals:
             flow.udps.mean_ttl = statistics.mean(ttl_vals)
+            # NOTE: std_ttl is structurally ~0 under NFStream — only flow-level
+            # min/max TTL are exposed and fixed-TTL OSes give min==max, so this
+            # was 100% zero across the 941k-flow eval. Kept for current-mapper
+            # compatibility; DROP from REALTIME_SAFE_FEATURES/BEST_FEATURES on retrain.
             flow.udps.std_ttl  = statistics.pstdev(ttl_vals) if len(ttl_vals) >= 2 else 0.0
             flow.udps.max_ttl  = float(max(ttl_vals))
             flow.udps.min_ttl  = float(min(ttl_vals))

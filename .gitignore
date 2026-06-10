@@ -1,9 +1,8 @@
-my_env/
-data/dataset.csv
-models/mapper
-.env
-pcaps/
-models/
+.env/
+data/
 eval_results/
-aggregated_flows.csv
+eval_results_fixed/
+models/
+pcaps/
+*/__pycache__
 services/nfstream/output/*
