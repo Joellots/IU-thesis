@@ -1,6 +1,7 @@
 .env/
 data/
 eval_results*
+!pcaps/mta/ioc_manifest.json
 models/
 pcaps/
 */__pycache__
