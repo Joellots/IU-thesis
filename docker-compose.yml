@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ─────────────────────────────────────────────────────────────────────────────
 # XAI-SOAR Pipeline — docker-compose.yml
 # Build order: kafka → producer → inference → translator → postgres → dashboard
@@ -29,6 +27,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx512m"   # cap JVM heap below the container limit
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 10s
@@ -36,6 +35,13 @@ services:
       retries: 10
     networks:
       - net
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
+        reservations:
+          memory: 512m
 
   # ── 2. Producers ────────────────────────────────────────────────────────────
   nfstream:
@@ -82,6 +88,11 @@ services:
     networks:
       - net
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
 
   # ── 3. Inference ───────────────────────────────────────────────────────────
   inference:
@@ -108,8 +119,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2g       
-          cpus: "2.0"
+          memory: 2g
+          cpus: "1.5"      # leave headroom on the 2-core host so other services don't starve
         reservations:
           memory: 1g
 
@@ -130,6 +141,11 @@ services:
     networks:
       - net
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
 
   # ── 5. PostgreSQL ──────────────────────────────────────────────────────────
   postgres:
@@ -149,6 +165,13 @@ services:
       retries: 10
     networks:
       - net
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
+        reservations:
+          memory: 256m
 
   # ── 6. Dashboard ───────────────────────────────────────────────────────────
   dashboard:
@@ -165,6 +188,11 @@ services:
     networks:
       - net
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
 
   # ── 7. Kafka UI (dev only — to be removed in production) ─────────────────────────
   kafka-ui:
@@ -175,11 +203,48 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      JAVA_OPTS: "-Xms256m -Xmx512m"          # cap JVM heap below the container limit
     depends_on:
       kafka:
         condition: service_healthy
     networks:
       - net
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+          cpus: "0.5"
+
+  
+  # ── 8. SOAR Orchestrator (TheHive case creation) ─────────────────────────
+  soar_orchestrator:
+    build: ./services/soar_orchestrator
+    container_name: soar_orchestrator
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Secrets: load from `.env` next to this file (no ${VAR} interpolation — avoids blank-key warnings).
+    # Copy `.env.example` → `.env` and set THEHIVE_API_KEY, CORTEX_API_KEY (and any overrides).
+    # `required: false` so fresh clones / CI can run `compose config` / `up` without the file.
+    env_file:
+      # - path: .env
+      #   required: false
+      - path: ./services/soar_orchestrator/.env
+        required: false
+    ports:
+      - "9100:9100"                         # Prometheus scrape target
+    volumes:
+      - attack_stix_cache:/app/cache
+    networks:
+      - net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
 
 networks:
   net:
@@ -187,3 +252,4 @@ networks:
 
 volumes:
   pgdata:
+  attack_stix_cache:
