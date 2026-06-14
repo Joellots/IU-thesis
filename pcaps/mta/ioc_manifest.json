@@ -1,0 +1,2020 @@
+{
+  "Lumma_2023-10-11.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2023/10/11",
+    "malicious_ips": [
+      "104.21.11.40",
+      "162.125.8.15"
+    ],
+    "malicious_domains": [
+      "teleportfilmona.online",
+      "ucdd5d6bc9869417d2bbd7f22955.dl.dropboxusercontent.com"
+    ]
+  },
+  "StealC_2024-01-12.pcap": {
+    "class": "exfil",
+    "family": "StealC",
+    "date": "2024/01/12",
+    "malicious_ips": [
+      "109.107.181.33"
+    ],
+    "malicious_domains": [
+      "erp.wesmarines.com",
+      "mimsmehediclub.com"
+    ]
+  },
+  "Meduza_2024-03-06_0.pcap": {
+    "class": "exfil",
+    "family": "Meduza",
+    "date": "2024/03/06",
+    "malicious_ips": [
+      "141.98.83.242",
+      "154.12.236.248",
+      "154.53.55.165",
+      "158.247.240.58",
+      "198.38.94.213",
+      "209.126.86.48",
+      "45.77.63.237",
+      "70.34.199.64",
+      "70.34.223.164",
+      "84.46.240.42",
+      "94.72.104.77",
+      "94.72.104.80"
+    ],
+    "malicious_domains": [
+      "topflowersclub.com",
+      "yourunitedlaws.com"
+    ]
+  },
+  "Meduza_2024-03-06_1.pcap": {
+    "class": "exfil",
+    "family": "Meduza",
+    "date": "2024/03/06",
+    "malicious_ips": [
+      "141.98.83.242",
+      "154.12.236.248",
+      "154.53.55.165",
+      "158.247.240.58",
+      "198.38.94.213",
+      "209.126.86.48",
+      "45.77.63.237",
+      "70.34.199.64",
+      "70.34.223.164",
+      "84.46.240.42",
+      "94.72.104.77",
+      "94.72.104.80"
+    ],
+    "malicious_domains": [
+      "topflowersclub.com",
+      "yourunitedlaws.com"
+    ]
+  },
+  "RedLine_2024-10-23.pcap": {
+    "class": "exfil",
+    "family": "RedLine",
+    "date": "2024/10/23",
+    "malicious_ips": [
+      "188.190.10.10"
+    ],
+    "malicious_domains": [
+      "188-190-10-10.clevhosting.com",
+      "ad-hardware.com"
+    ]
+  },
+  "AgentTesla_2024-12-04.pcap": {
+    "class": "exfil",
+    "family": "AgentTesla",
+    "date": "2024/12/04",
+    "malicious_ips": [
+      "192.254.225.136",
+      "94.141.120.32"
+    ],
+    "malicious_domains": [
+      "acronas.com.tr",
+      "bsky.app",
+      "ercolina-usa.com",
+      "ftp.ercolina-usa.com"
+    ]
+  },
+  "AgentTesla_2024-06-10.pcap": {
+    "class": "exfil",
+    "family": "AgentTesla",
+    "date": "2024/06/10",
+    "malicious_ips": [
+      "155.94.210.73",
+      "82.209.169.34"
+    ],
+    "malicious_domains": [
+      "expressairhkg.com",
+      "mail.bredband2.com",
+      "unassigned.quadranet.com"
+    ]
+  },
+  "RedLine_2023-03-02.pcap": {
+    "class": "exfil",
+    "family": "RedLine",
+    "date": "2023/03/02",
+    "malicious_ips": [
+      "188.227.106.13",
+      "62.204.41.175"
+    ],
+    "malicious_domains": []
+  },
+  "SnakeKeylogger_2024-09-17.pcap": {
+    "class": "exfil",
+    "family": "SnakeKeylogger",
+    "date": "2024/09/17",
+    "malicious_ips": [
+      "216.252.233.118"
+    ],
+    "malicious_domains": [
+      "ftp.lifechangerscare.com"
+    ]
+  },
+  "Lumma_2024-10-03.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2024/10/03",
+    "malicious_ips": [
+      "212.193.4.66"
+    ],
+    "malicious_domains": [
+      "drawzhotdog.shop",
+      "fragnantbui.shop",
+      "ghostreedmnu.shop",
+      "gravvitywio.store",
+      "gutterydhowi.shop",
+      "highawaretemptersudwu.xyz",
+      "offensivedzvju.shop",
+      "reinforcenh.shop",
+      "stogeneratmns.shop",
+      "vozmeatillu.shop"
+    ]
+  },
+  "SnakeKeylogger_2024-09-16.pcap": {
+    "class": "exfil",
+    "family": "SnakeKeylogger",
+    "date": "2024/09/16",
+    "malicious_ips": [
+      "61.222.155.52",
+      "84.38.129.55"
+    ],
+    "malicious_domains": [
+      "ip-129-55.dataclub.eu",
+      "leadingstar.tw",
+      "mail.leadingstar.tw",
+      "smtp.inhousepick.com"
+    ]
+  },
+  "XLoader_2023-06-13.pcap": {
+    "class": "exfil",
+    "family": "XLoader",
+    "date": "2023/06/13",
+    "malicious_ips": [],
+    "malicious_domains": [
+      "research.checkpoint.com",
+      "www.18ortamalem.xyz",
+      "www.aalesundapartment.online",
+      "www.advisuninfotech.com",
+      "www.afreeto.com",
+      "www.ainji3.space",
+      "www.alessandrafausto.com",
+      "www.alphaconqa.com",
+      "www.animeone.org",
+      "www.bamexmart.xyz",
+      "www.cjwj.vip",
+      "www.cmdhau8.com",
+      "www.cracksoftwaresite.com",
+      "www.cyclonescreen.com",
+      "www.df3pr.shop",
+      "www.expaol.com",
+      "www.finerspaces.net",
+      "www.forgivemy.life",
+      "www.gbxgh.club",
+      "www.geoffregsiu.com",
+      "www.getbevtoday.click",
+      "www.ggusocial.com",
+      "www.golajme.com",
+      "www.heritage-pnc.com",
+      "www.homeoftogetherness.com",
+      "www.hooppthames.com",
+      "www.hospitable-shoes.life",
+      "www.investwiseehub.online",
+      "www.isst.info",
+      "www.jedcvolj.bond",
+      "www.jglblr.org",
+      "www.kalevunited.com",
+      "www.ladookhotnikov.pro",
+      "www.lala8.top",
+      "www.messaggerienazionali.com",
+      "www.mrfkzd.cfd",
+      "www.mudwoods.com",
+      "www.nachhaltig-steuern.info",
+      "www.new-balkon-otdelka.site",
+      "www.novometedodigital.fun",
+      "www.onenoteworkforceap.com",
+      "www.pdfamazon.com",
+      "www.pymhn.top",
+      "www.qtr954.top",
+      "www.sdrongfei.com",
+      "www.sis-b.com",
+      "www.spanishnoir.com",
+      "www.sportswpk.site",
+      "www.superslot50.app",
+      "www.thebaewatch.com",
+      "www.viagreen.xyz",
+      "www.wxuvvb.icu",
+      "www.yuinetwork.xyz"
+    ]
+  },
+  "AgentTesla_2023-11-22.pcap": {
+    "class": "exfil",
+    "family": "AgentTesla",
+    "date": "2023/11/22",
+    "malicious_ips": [
+      "187.217.245.25",
+      "188.114.97.3",
+      "45.138.16.176",
+      "51.222.104.17"
+    ],
+    "malicious_domains": [
+      "ftp.siscop.com.co",
+      "uploaddeimagens.com.br"
+    ]
+  },
+  "XLoader_2023-06-21.pcap": {
+    "class": "exfil",
+    "family": "XLoader",
+    "date": "2023/06/21",
+    "malicious_ips": [],
+    "malicious_domains": [
+      "www.10-euro.com",
+      "www.5353405.com",
+      "www.apidachicago.org",
+      "www.automotiveparts-store.com",
+      "www.brainbookgroup.com",
+      "www.certud.fun",
+      "www.chicashentai.com",
+      "www.free-enjoy.co.uk",
+      "www.genia-tori-ks.net",
+      "www.iran2022.info",
+      "www.itticards.com",
+      "www.ivanhagen.com",
+      "www.justremortgage.com",
+      "www.k-outlets.com",
+      "www.kastamonuhaberleri.xyz",
+      "www.klbertc.com",
+      "www.masteramericangarage.com",
+      "www.middleshanghai.com",
+      "www.montazeran.net",
+      "www.mybyuurl.com",
+      "www.nnncb.top",
+      "www.noprostatit.store",
+      "www.ob219.com",
+      "www.patrickguarte.com",
+      "www.phootka.ru",
+      "www.piaynemo.com",
+      "www.pinwheeleffect.org",
+      "www.printjust.online",
+      "www.promarproperty.com",
+      "www.purseven.store",
+      "www.rsvstudio.com",
+      "www.searchbot.su",
+      "www.seatandfeel.com",
+      "www.siddhtechcreators.com",
+      "www.smartrykvanniekerk.site",
+      "www.socialabs.site",
+      "www.steripartners.com",
+      "www.travelsandphotos.com",
+      "www.verdolaga.net",
+      "www.welldaze.com",
+      "www.wewantabreak.com",
+      "www.xdawo.com",
+      "www.xn--jpochsseafood-fhb.com",
+      "www.yougfatty.info"
+    ]
+  },
+  "Lumma_2024-09-19.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2024/09/19",
+    "malicious_ips": [],
+    "malicious_domains": [
+      "access-htaccess.com",
+      "api.blockcypher.com",
+      "back-kurwa.com",
+      "bitcoinexplorer.org",
+      "blockstream.info",
+      "btcscan.org",
+      "chick-chick666.com",
+      "eemmbryequo.shop",
+      "exp.btcme.com",
+      "genedjestytw.shop",
+      "gzipdot.com",
+      "jspm.dev",
+      "keennylrwmqlw.shop",
+      "licenseodqwmqn.shop",
+      "nhit66.com",
+      "reggwardssdqw.shop",
+      "relaxatinownio.shop",
+      "software-license1.com",
+      "tendencctywop.shop",
+      "tesecuuweqo.shop",
+      "tryyudjasudqo.shop"
+    ]
+  },
+  "XLoader_2023-11-29.pcap": {
+    "class": "exfil",
+    "family": "XLoader",
+    "date": "2023/11/29",
+    "malicious_ips": [
+      "46.183.221.59",
+      "88.209.206.65"
+    ],
+    "malicious_domains": [
+      "hackforums.net",
+      "hsrfunke.com",
+      "loose.vietdot.com",
+      "www.1214888.com",
+      "www.austintrafficlawyer.com",
+      "www.autrevalevale.click",
+      "www.cjjmobbbshhhu.shop",
+      "www.e3iaibr.icu",
+      "www.infinite-7.com",
+      "www.julieannmirabel.online",
+      "www.ldhqi4.fun",
+      "www.ncdanmark.org",
+      "www.ofupakoshi.com",
+      "www.overthemoonphoto.com",
+      "www.taxhwangeub.com",
+      "www.terranovaservices.top",
+      "www.zkrbma.store"
+    ]
+  },
+  "Lumma_2024-03-07_0.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2024/03/07",
+    "malicious_ips": [
+      "104.21.36.52",
+      "104.21.41.147",
+      "104.21.78.238",
+      "172.67.147.167",
+      "85.193.84.39",
+      "95.164.3.171"
+    ],
+    "malicious_domains": [
+      "auctiondecadecontaii.shop",
+      "aytobusesre.com",
+      "horaot.org",
+      "lufyfeo.org",
+      "maga-414515.appspot.com",
+      "popfealt.one"
+    ]
+  },
+  "Lumma_2024-03-07_1.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2024/03/07",
+    "malicious_ips": [
+      "104.21.36.52",
+      "104.21.41.147",
+      "104.21.78.238",
+      "172.67.147.167",
+      "85.193.84.39",
+      "95.164.3.171"
+    ],
+    "malicious_domains": [
+      "auctiondecadecontaii.shop",
+      "aytobusesre.com",
+      "horaot.org",
+      "lufyfeo.org",
+      "maga-414515.appspot.com",
+      "popfealt.one"
+    ]
+  },
+  "Astaroth_2023-12-11.pcap": {
+    "class": "exfil",
+    "family": "Astaroth",
+    "date": "2023/12/11",
+    "malicious_ips": [
+      "100.140.167.72",
+      "159.89.5.86",
+      "172.64.80.1",
+      "172.67.169.60",
+      "18.228.115.60",
+      "18.229.146.63",
+      "18.229.248.167",
+      "18.231.93.153",
+      "52.21.33.16",
+      "54.94.248.37",
+      "72.167.140.100"
+    ],
+    "malicious_domains": [
+      "1.tcp.sa.ngrok.io",
+      "100.140.167.72.host.secureserver.net",
+      "gaa7r.lavacelullares.pro",
+      "kele4.emporioredepas.com.br",
+      "multas.com",
+      "ngrok.io",
+      "twio0t.vertucelullares.pro"
+    ]
+  },
+  "Rhadamanthys_2023-01-03.pcap": {
+    "class": "exfil",
+    "family": "Rhadamanthys",
+    "date": "2023/01/03",
+    "malicious_ips": [
+      "162.33.178.106"
+    ],
+    "malicious_domains": [
+      "hasankahrimanoglu.com.tr",
+      "noteepad.hasankahrimanoglu.com.tr"
+    ]
+  },
+  "DarkGate_2024-05-14.pcap": {
+    "class": "c2_beaconing",
+    "family": "DarkGate",
+    "date": "2024/05/14",
+    "malicious_ips": [
+      "104.154.143.100",
+      "91.222.173.186"
+    ],
+    "malicious_domains": [
+      "flexiblemaria.com",
+      "www.rockcreekdds.com"
+    ]
+  },
+  "DarkGate_2024-01-30.pcap": {
+    "class": "c2_beaconing",
+    "family": "DarkGate",
+    "date": "2024/01/30",
+    "malicious_ips": [
+      "5.252.178.193",
+      "94.131.101.186"
+    ],
+    "malicious_domains": [
+      "adclick.g.doubleclick.net",
+      "mainsercheronlinehostingbot.com",
+      "monitor.clickcease.com",
+      "projetodegente.com",
+      "www.verxy.me"
+    ]
+  },
+  "Pikabot_2024-02-08.pcap": {
+    "class": "c2_beaconing",
+    "family": "Pikabot",
+    "date": "2024/02/08",
+    "malicious_ips": [
+      "104.129.55.103",
+      "158.220.80.157",
+      "158.220.80.167"
+    ],
+    "malicious_domains": [
+      "gloverstech.com"
+    ]
+  },
+  "CobaltStrike_2024-04-18.pcap": {
+    "class": "c2_beaconing",
+    "family": "CobaltStrike",
+    "date": "2024/04/18",
+    "malicious_ips": [
+      "193.32.176.22",
+      "212.18.104.28",
+      "85.239.53.219"
+    ],
+    "malicious_domains": [
+      "api.openweathermap.org"
+    ]
+  },
+  "IcedID_2023-11-27.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2023/11/27",
+    "malicious_ips": [
+      "104.21.25.253",
+      "104.21.39.107",
+      "104.21.66.197",
+      "172.67.134.246",
+      "172.67.144.144",
+      "172.67.164.29"
+    ],
+    "malicious_domains": [
+      "mazdakrichest.com",
+      "missisanjoup.shop",
+      "mraskopal.link"
+    ]
+  },
+  "IcedID_2023-10-31.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2023/10/31",
+    "malicious_ips": [
+      "104.21.32.6",
+      "159.89.124.188",
+      "162.33.179.136",
+      "45.61.136.22",
+      "45.61.137.225",
+      "45.61.139.232"
+    ],
+    "malicious_domains": [
+      "asleytomafa.com",
+      "brojizuza.com",
+      "grafielucho.com",
+      "manjuskploman.com",
+      "qousahaff.com"
+    ]
+  },
+  "Danabot_2024-02-14.pcap": {
+    "class": "c2_beaconing",
+    "family": "Danabot",
+    "date": "2024/02/14",
+    "malicious_ips": [
+      "195.133.88.98",
+      "62.173.146.41",
+      "91.201.67.85"
+    ],
+    "malicious_domains": [
+      "content.servepics.com",
+      "portfolio.serveirc.com",
+      "soundata.top",
+      "soundbase.top",
+      "soundline.top"
+    ]
+  },
+  "IcedID_2023-09-28.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2023/09/28",
+    "malicious_ips": [
+      "104.21.85.40",
+      "141.98.80.158",
+      "155.138.160.67",
+      "157.245.102.160",
+      "157.245.106.203",
+      "172.86.75.88"
+    ],
+    "malicious_domains": [
+      "abelinis.com",
+      "awindakizend.com",
+      "carsfootyelo.com",
+      "feekstokandy.com",
+      "majzolimka.com",
+      "skillerszone.com",
+      "umomrmwa.com"
+    ]
+  },
+  "IcedID_2023-03-24.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2023/03/24",
+    "malicious_ips": [
+      "193.239.85.16",
+      "195.20.17.21",
+      "206.166.251.62",
+      "31.220.50.207",
+      "5.230.73.157"
+    ],
+    "malicious_domains": [
+      "gabrikxuira.com",
+      "keyzishaptu.com",
+      "liguspotforsit.com",
+      "mystical-rhino-377704.appspot.com",
+      "neighborhood-dc.neighborhood.site",
+      "qonavlecher.com",
+      "urlscan.io",
+      "voiceinfosys.net"
+    ]
+  },
+  "Astaroth_2023-01-04_0.pcap": {
+    "class": "exfil",
+    "family": "Astaroth",
+    "date": "2023/01/04",
+    "malicious_ips": [
+      "104.21.68.203",
+      "104.21.78.47",
+      "172.67.179.161",
+      "172.67.181.167",
+      "3.3.14.5",
+      "3.3.16.1",
+      "89.223.88.50",
+      "89.223.88.74"
+    ],
+    "malicious_domains": [
+      "10dq5v6vyv5.maluemanoelentulhosltda.website",
+      "72asa.nauan.cfd",
+      "negocios07.fabiobottoni.com.br",
+      "negocios08.fabiobottoni.com.br",
+      "o6a3e.ulafeohash.world",
+      "solidacloud.br",
+      "www.fullersfolio.co.uk"
+    ]
+  },
+  "Astaroth_2023-01-04_1.pcap": {
+    "class": "exfil",
+    "family": "Astaroth",
+    "date": "2023/01/04",
+    "malicious_ips": [
+      "104.21.68.203",
+      "104.21.78.47",
+      "172.67.179.161",
+      "172.67.181.167",
+      "3.3.14.5",
+      "3.3.16.1",
+      "89.223.88.50",
+      "89.223.88.74"
+    ],
+    "malicious_domains": [
+      "10dq5v6vyv5.maluemanoelentulhosltda.website",
+      "72asa.nauan.cfd",
+      "negocios07.fabiobottoni.com.br",
+      "negocios08.fabiobottoni.com.br",
+      "o6a3e.ulafeohash.world",
+      "solidacloud.br",
+      "www.fullersfolio.co.uk"
+    ]
+  },
+  "IcedID_2023-01-12.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2023/01/12",
+    "malicious_ips": [
+      "103.208.85.127",
+      "162.33.177.186",
+      "185.173.34.36",
+      "199.127.60.47",
+      "5.230.74.203",
+      "94.140.115.3"
+    ],
+    "malicious_domains": [
+      "allertmnemonkik.com",
+      "cobalt-nomad-372419.appspot.com",
+      "fepopeguc.com",
+      "lezhidov.cloud"
+    ]
+  },
+  "IcedID_2022-12-20.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2022/12/20",
+    "malicious_ips": [
+      "103.208.85.184",
+      "143.198.92.88",
+      "209.182.227.138",
+      "23.81.246.152"
+    ],
+    "malicious_domains": [
+      "trbiriumpa.com",
+      "xedefeg.com"
+    ]
+  },
+  "IcedID_2022-10-31_0.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2022/10/31",
+    "malicious_ips": [
+      "137.184.208.116",
+      "137.74.104.108",
+      "138.68.255.102",
+      "198.44.140.67",
+      "66.63.168.75",
+      "67.205.184.237",
+      "94.140.114.103"
+    ],
+    "malicious_domains": [
+      "clouditsoft.com",
+      "ringashopsu.com",
+      "sainforgromset.com",
+      "vgiragdoffy.com"
+    ]
+  },
+  "IcedID_2022-10-31_1.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2022/10/31",
+    "malicious_ips": [
+      "137.184.208.116",
+      "137.74.104.108",
+      "138.68.255.102",
+      "198.44.140.67",
+      "66.63.168.75",
+      "67.205.184.237",
+      "94.140.114.103"
+    ],
+    "malicious_domains": [
+      "clouditsoft.com",
+      "ringashopsu.com",
+      "sainforgromset.com",
+      "vgiragdoffy.com"
+    ]
+  },
+  "IcedID_2022-07-06.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2022/07/06",
+    "malicious_ips": [
+      "134.209.107.62",
+      "188.40.246.37",
+      "198.44.132.80",
+      "92.38.171.191"
+    ],
+    "malicious_domains": [
+      "carismorth.com",
+      "centertechengineering.com",
+      "deft-scout-355009.appspot.com",
+      "uytricmpreprom.com"
+    ]
+  },
+  "Qakbot_2022-12-09.pcap": {
+    "class": "c2_beaconing",
+    "family": "Qakbot",
+    "date": "2022/12/09",
+    "malicious_ips": [
+      "100.8.168.108",
+      "103.71.21.107",
+      "108.6.249.139",
+      "109.11.175.42",
+      "109.145.40.125",
+      "109.76.25.214",
+      "12.172.173.82",
+      "121.122.99.223",
+      "123.3.240.16",
+      "136.35.241.159",
+      "141.255.65.113",
+      "172.117.139.142",
+      "172.90.139.138",
+      "173.18.126.3",
+      "173.239.94.212",
+      "174.104.184.149",
+      "176.133.4.230",
+      "178.191.21.187",
+      "184.189.41.80",
+      "184.68.116.146",
+      "185.135.120.81",
+      "188.48.123.229",
+      "188.79.182.186",
+      "190.24.45.24",
+      "193.253.100.236",
+      "193.32.212.114",
+      "197.94.213.23",
+      "199.83.165.233",
+      "2.99.47.198",
+      "201.137.151.25",
+      "201.208.139.250",
+      "208.180.17.32",
+      "213.67.255.57",
+      "217.128.91.196",
+      "24.142.218.202",
+      "24.206.27.39",
+      "24.69.87.61",
+      "24.71.120.191",
+      "27.109.19.90",
+      "31.53.29.245",
+      "38.166.226.185",
+      "41.228.226.109",
+      "46.10.198.106",
+      "47.16.76.35",
+      "47.34.30.133",
+      "47.41.154.250",
+      "50.68.204.71",
+      "50.90.249.161",
+      "64.121.161.102",
+      "66.180.226.117",
+      "66.191.69.18",
+      "66.85.236.205",
+      "67.61.71.201",
+      "69.119.123.159",
+      "70.115.104.126",
+      "70.121.198.103",
+      "70.51.153.251",
+      "70.66.199.12",
+      "70.77.116.233",
+      "71.247.10.63",
+      "71.31.101.183",
+      "72.200.109.104",
+      "73.155.10.79",
+      "73.29.92.128",
+      "73.36.196.11",
+      "74.66.134.24",
+      "75.143.236.149",
+      "75.98.154.19",
+      "75.99.125.236",
+      "76.100.159.250",
+      "76.80.180.154",
+      "78.69.251.252",
+      "80.13.179.151",
+      "81.229.117.95",
+      "81.248.77.37",
+      "82.9.210.36",
+      "83.213.192.136",
+      "84.113.121.103",
+      "84.35.26.14",
+      "85.61.165.153",
+      "85.7.61.22",
+      "86.130.9.250",
+      "86.165.15.180",
+      "86.171.75.63",
+      "86.190.16.164",
+      "86.96.75.237",
+      "87.202.101.164",
+      "87.221.197.110",
+      "87.223.91.46",
+      "88.126.94.4",
+      "90.104.22.28",
+      "90.221.1.60",
+      "90.4.193.117",
+      "90.66.229.185",
+      "90.79.129.166",
+      "91.165.188.74",
+      "91.169.12.198",
+      "91.171.148.162",
+      "91.180.68.95",
+      "91.68.227.219",
+      "92.154.17.149",
+      "92.189.214.236",
+      "92.27.86.48",
+      "92.8.190.211",
+      "93.156.98.63",
+      "94.30.98.134",
+      "98.145.23.67",
+      "98.147.155.235",
+      "98.178.242.28",
+      "98.187.21.2",
+      "99.229.164.42",
+      "99.251.67.229"
+    ],
+    "malicious_domains": [
+      "fscej.org"
+    ]
+  },
+  "IcedID_2023-05-10.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2023/05/10",
+    "malicious_ips": [
+      "103.53.42.238",
+      "144.208.127.242",
+      "149.102.225.18",
+      "2.49.63.193",
+      "207.148.14.105",
+      "37.187.252.187",
+      "45.155.37.101",
+      "46.151.30.109",
+      "5.42.221.144",
+      "62.109.150.178",
+      "69.89.24.241",
+      "77.105.141.154",
+      "81.224.201.143",
+      "91.193.16.139"
+    ],
+    "malicious_domains": [
+      "alstanet.cz",
+      "amorconsulta.com.br",
+      "broadcom.com",
+      "cisco.com",
+      "encuentromundialdevalores.org",
+      "floatfil.com",
+      "masjidtrust.com",
+      "ns.phpafrique.biz",
+      "oracle.com",
+      "outbound-ss-820.bluehost.com",
+      "smtpx012-2.webglobe.com",
+      "smtpx012.webglobe.com",
+      "supermarchemontsinai.com",
+      "vogue-pharmaceuticals.com",
+      "xfinity.com",
+      "yahoo.com"
+    ]
+  },
+  "Qakbot_2022-09-29.pcap": {
+    "class": "c2_beaconing",
+    "family": "Qakbot",
+    "date": "2022/09/29",
+    "malicious_ips": [
+      "186.81.122.168",
+      "186.90.144.235",
+      "193.3.19.137",
+      "194.1.192.131",
+      "194.165.16.64",
+      "85.86.242.245"
+    ],
+    "malicious_domains": [
+      "linuxtr01.webimonline.com",
+      "onefile.icu",
+      "polyfilmambalaj.com"
+    ]
+  },
+  "IcedID_2022-01-12.pcap": {
+    "class": "c2_beaconing",
+    "family": "IcedID",
+    "date": "2022/01/12",
+    "malicious_ips": [
+      "104.168.44.45",
+      "159.89.171.14",
+      "185.70.184.43",
+      "185.70.186.133",
+      "45.147.228.138",
+      "45.147.228.197"
+    ],
+    "malicious_domains": [
+      "charliedeffer.store",
+      "hashingold.top",
+      "lasticjugs.top",
+      "olerantand.top",
+      "ouldmakeithapp.top"
+    ]
+  },
+  "Pikabot_2023-12-15.pcap": {
+    "class": "c2_beaconing",
+    "family": "Pikabot",
+    "date": "2023/12/15",
+    "malicious_ips": [
+      "139.99.222.29",
+      "141.95.108.252",
+      "154.211.12.126",
+      "172.232.173.141",
+      "45.76.98.136",
+      "51.83.253.102",
+      "57.128.108.132",
+      "57.128.109.221",
+      "57.128.164.11",
+      "57.128.83.129"
+    ],
+    "malicious_domains": [
+      "3070.store",
+      "apurnomo.com",
+      "baumbachers.com",
+      "disturbnot.com",
+      "ionister.com",
+      "jinjadiocese.com",
+      "kaabrehman.com",
+      "keebling.com",
+      "nsicon2022.com",
+      "pindjagatpur.com",
+      "rayyantechnology.com",
+      "zegaponsel.site"
+    ]
+  },
+  "Qakbot_2023-05-10.pcap": {
+    "class": "c2_beaconing",
+    "family": "Qakbot",
+    "date": "2023/05/10",
+    "malicious_ips": [
+      "103.53.42.238",
+      "144.208.127.242",
+      "149.102.225.18",
+      "2.49.63.193",
+      "207.148.14.105",
+      "37.187.252.187",
+      "45.155.37.101",
+      "46.151.30.109",
+      "5.42.221.144",
+      "62.109.150.178",
+      "69.89.24.241",
+      "77.105.141.154",
+      "81.224.201.143",
+      "91.193.16.139"
+    ],
+    "malicious_domains": [
+      "alstanet.cz",
+      "amorconsulta.com.br",
+      "broadcom.com",
+      "cisco.com",
+      "encuentromundialdevalores.org",
+      "floatfil.com",
+      "masjidtrust.com",
+      "ns.phpafrique.biz",
+      "oracle.com",
+      "outbound-ss-820.bluehost.com",
+      "smtpx012-2.webglobe.com",
+      "smtpx012.webglobe.com",
+      "supermarchemontsinai.com",
+      "vogue-pharmaceuticals.com",
+      "xfinity.com",
+      "yahoo.com"
+    ]
+  },
+  "Pikabot_2023-10-03.pcap": {
+    "class": "c2_beaconing",
+    "family": "Pikabot",
+    "date": "2023/10/03",
+    "malicious_ips": [
+      "167.86.81.87",
+      "167.86.96.3",
+      "179.60.149.244",
+      "207.246.78.68",
+      "209.126.9.47",
+      "38.242.240.28",
+      "79.141.175.96"
+    ],
+    "malicious_domains": [
+      "aeroplaner.it",
+      "lasttoarrive.org",
+      "stylelessness.stream",
+      "zzerxc.com"
+    ]
+  },
+  "Qakbot_2022-06-27_0.pcap": {
+    "class": "c2_beaconing",
+    "family": "Qakbot",
+    "date": "2022/06/27",
+    "malicious_ips": [
+      "179.60.146.16",
+      "23.111.114.52",
+      "23.29.125.210",
+      "45.46.53.140",
+      "70.46.220.114",
+      "78.31.67.7",
+      "94.59.15.180"
+    ],
+    "malicious_domains": [
+      "bande.icu"
+    ]
+  },
+  "Qakbot_2022-06-27_1.pcap": {
+    "class": "c2_beaconing",
+    "family": "Qakbot",
+    "date": "2022/06/27",
+    "malicious_ips": [
+      "179.60.146.16",
+      "23.111.114.52",
+      "23.29.125.210",
+      "45.46.53.140",
+      "70.46.220.114",
+      "78.31.67.7",
+      "94.59.15.180"
+    ],
+    "malicious_domains": [
+      "bande.icu"
+    ]
+  },
+  "DarkGate_2023-12-07.pcap": {
+    "class": "c2_beaconing",
+    "family": "DarkGate",
+    "date": "2023/12/07",
+    "malicious_ips": [
+      "104.21.61.240",
+      "172.67.216.253",
+      "46.101.78.238"
+    ],
+    "malicious_domains": [
+      "cdn-uk.widgetsfordeploy.com",
+      "cdn.boxmedrbopdrv.com",
+      "elasticyouth.com",
+      "tos.viewdobdrv.com"
+    ]
+  },
+  "DarkGate_2023-11-20.pcap": {
+    "class": "c2_beaconing",
+    "family": "DarkGate",
+    "date": "2023/11/20",
+    "malicious_ips": [
+      "188.246.224.221",
+      "45.154.98.21"
+    ],
+    "malicious_domains": [
+      "api.onedrive.com",
+      "ooqknq.am.files.1drv.com"
+    ]
+  },
+  "Pikabot_2023-05-23.pcap": {
+    "class": "c2_beaconing",
+    "family": "Pikabot",
+    "date": "2023/05/23",
+    "malicious_ips": [
+      "103.144.242.56",
+      "112.121.219.231",
+      "126.228.74.105",
+      "129.153.135.83",
+      "129.213.54.49",
+      "129.80.164.200",
+      "130.99.198.126",
+      "131.92.153.135",
+      "132.148.79.222",
+      "144.172.126.136",
+      "151.236.14.179",
+      "176.124.198.213",
+      "185.87.148.132",
+      "192.121.17.68",
+      "192.121.17.92",
+      "192.9.135.73",
+      "193.122.200.171",
+      "194.53.91.186",
+      "45.154.24.57",
+      "74.147.74.110",
+      "81.69.0.17"
+    ],
+    "malicious_domains": [
+      "biocoreopen.com",
+      "turiruy.us"
+    ]
+  },
+  "DarkGate_2023-10-25.pcap": {
+    "class": "c2_beaconing",
+    "family": "DarkGate",
+    "date": "2023/10/25",
+    "malicious_ips": [
+      "5.252.177.243",
+      "82.117.253.34"
+    ],
+    "malicious_domains": [
+      "adclick.g.doubleclick.net",
+      "coolsculptingsingapore.com",
+      "elizabethcosmiatriaprofesional.com",
+      "fidgetoyz.com",
+      "taochinashowwers.com",
+      "therockinghutss.com"
+    ]
+  },
+  "DarkGate_2023-10-04.pcap": {
+    "class": "c2_beaconing",
+    "family": "DarkGate",
+    "date": "2023/10/04",
+    "malicious_ips": [
+      "3.3.14.5",
+      "81.19.135.139"
+    ],
+    "malicious_domains": [
+      "getldrrgoodgame.com",
+      "lasttoarrive.org"
+    ]
+  },
+  "Pikabot_2023-11-02.pcap": {
+    "class": "c2_beaconing",
+    "family": "Pikabot",
+    "date": "2023/11/02",
+    "malicious_ips": [
+      "104.238.144.171",
+      "15.235.202.109",
+      "15.235.44.231",
+      "15.235.45.155",
+      "15.235.47.206",
+      "15.235.47.80",
+      "154.221.30.136",
+      "154.61.75.156",
+      "154.92.19.139",
+      "158.247.197.73",
+      "158.247.202.180",
+      "167.179.103.206",
+      "198.13.58.126",
+      "210.243.8.247",
+      "216.128.185.35",
+      "45.32.140.39",
+      "51.195.232.97",
+      "51.68.147.114",
+      "51.79.143.215",
+      "65.20.84.254",
+      "65.20.84.3",
+      "95.179.141.41"
+    ],
+    "malicious_domains": [
+      "gdom.org"
+    ]
+  },
+  "Danabot_2023-08-03.pcap": {
+    "class": "c2_beaconing",
+    "family": "Danabot",
+    "date": "2023/08/03",
+    "malicious_ips": [
+      "167.88.166.193",
+      "45.61.169.91"
+    ],
+    "malicious_domains": [
+      "bildhm.com",
+      "countingstatistic.com",
+      "dc534.4sync.com",
+      "intrigi.net",
+      "tunbontaxes.com",
+      "www.4sync.com"
+    ]
+  },
+  "BumbleBee_2022-12-07.pcap": {
+    "class": "c2_beaconing",
+    "family": "BumbleBee",
+    "date": "2022/12/07",
+    "malicious_ips": [],
+    "malicious_domains": [
+      "kettletech.com"
+    ]
+  },
+  "BumbleBee_2022-06-14.pcap": {
+    "class": "c2_beaconing",
+    "family": "BumbleBee",
+    "date": "2022/06/14",
+    "malicious_ips": [
+      "172.93.181.105",
+      "193.233.203.156",
+      "39.57.152.217",
+      "69.161.201.181"
+    ],
+    "malicious_domains": [
+      "hocavopeh.com"
+    ]
+  },
+  "Emotet_2022-07-07.pcap": {
+    "class": "c2_beaconing",
+    "family": "Emotet",
+    "date": "2022/07/07",
+    "malicious_ips": [
+      "112.78.112.34",
+      "138.197.68.35",
+      "144.202.108.116",
+      "146.59.151.250",
+      "162.243.103.246",
+      "164.90.222.65",
+      "178.255.41.17",
+      "193.53.245.52",
+      "201.73.143.120",
+      "34.80.191.247",
+      "52.18.235.51",
+      "91.239.206.239"
+    ],
+    "malicious_domains": [
+      "airhobi.com",
+      "distinctive-obi-mgw.aws-euw1.cloud-ara.tyk.io",
+      "yudaisuzuki.jp",
+      "zspwolawiazowa.pl"
+    ]
+  },
+  "Emotet_2022-04-25.pcap": {
+    "class": "c2_beaconing",
+    "family": "Emotet",
+    "date": "2022/04/25",
+    "malicious_ips": [
+      "131.100.24.199",
+      "138.197.147.101",
+      "138.201.142.73",
+      "176.31.163.17",
+      "217.160.107.189",
+      "49.231.16.102",
+      "51.210.176.76",
+      "91.207.181.106",
+      "93.104.209.56"
+    ],
+    "malicious_domains": [
+      "colegiounamuno.es",
+      "creemo.pl",
+      "demo34.ckg.hk",
+      "focusmedica.in"
+    ]
+  },
+  "Remcos_2023-06-26.pcap": {
+    "class": "c2_beaconing",
+    "family": "Remcos",
+    "date": "2023/06/26",
+    "malicious_ips": [],
+    "malicious_domains": [
+      "www.33832.xyz",
+      "www.adswarior.click",
+      "www.aichicup.com",
+      "www.aiunclouded.com",
+      "www.artverseclothing.com",
+      "www.ayam48ekor.xyz",
+      "www.beautifulmindsmgmt.com",
+      "www.bella-japon.com",
+      "www.bocahn4kal46.site",
+      "www.dbhkcnrsah.com",
+      "www.ddgarciaf.live",
+      "www.downloadcorner.com",
+      "www.edgeater.com",
+      "www.exceptionalservicegroup.com",
+      "www.goturnkeywebsites.com",
+      "www.jasdoltin.xyz",
+      "www.joesplace.xyz",
+      "www.kccmysore.com",
+      "www.lkfangche.com",
+      "www.lmn2209.sbs",
+      "www.lovemehireme.com",
+      "www.markrepository.website",
+      "www.miemishop.com",
+      "www.mxui.top",
+      "www.qgbsukco2.com",
+      "www.qof521.xyz",
+      "www.redactedgraphics.com",
+      "www.samakhsarapi.online",
+      "www.shop-foule.com",
+      "www.suistamp.com",
+      "www.tamikamtownsendinc.com",
+      "www.theproteusvoid.com",
+      "www.toptoveterteam.world",
+      "www.vippay.site",
+      "www.winch-systems.com",
+      "www.www30100h.com",
+      "www.xrblockbuster.com",
+      "www.yctuba.com",
+      "www.zf129.vip"
+    ]
+  },
+  "GootLoader_2023-12-29.pcap": {
+    "class": "c2_beaconing",
+    "family": "GootLoader",
+    "date": "2023/12/29",
+    "malicious_ips": [],
+    "malicious_domains": [
+      "elevencoffees.com",
+      "gambrick.com",
+      "instawp.io",
+      "lacomun.net",
+      "latesthentai.com",
+      "parubok-lesia.com",
+      "tattoo-mall.ru",
+      "wdtprs.com",
+      "yowieworld.com"
+    ]
+  },
+  "Qakbot_2022-11-14_0.pcap": {
+    "class": "c2_beaconing",
+    "family": "Qakbot",
+    "date": "2022/11/14",
+    "malicious_ips": [
+      "109.11.175.42",
+      "109.149.147.221",
+      "109.218.233.44",
+      "178.169.196.115",
+      "190.11.198.68",
+      "190.74.23.139",
+      "194.165.16.90",
+      "2.83.62.105",
+      "200.44.208.217",
+      "213.67.255.57",
+      "213.91.235.146",
+      "23.111.114.52",
+      "37.252.0.102",
+      "50.37.154.115",
+      "69.133.162.35",
+      "70.95.236.129",
+      "77.126.81.208",
+      "78.31.67.7",
+      "79.37.204.67",
+      "80.13.179.151",
+      "82.121.237.106",
+      "82.155.111.187",
+      "82.34.170.37",
+      "86.165.15.180",
+      "86.45.66.141",
+      "88.152.182.39",
+      "89.216.114.163",
+      "90.162.45.154",
+      "92.137.74.174",
+      "92.191.49.255",
+      "92.207.132.174",
+      "92.27.86.48",
+      "95.94.33.189"
+    ],
+    "malicious_domains": [
+      "broadcom.com",
+      "cisco.com",
+      "oracle.com",
+      "vipsauna.com",
+      "www.broadcom.com",
+      "www.cisco.com",
+      "www.oracle.com",
+      "www.xfinity.com",
+      "www.yahoo.com",
+      "xfinity.com",
+      "yahoo.com"
+    ]
+  },
+  "Qakbot_2022-11-14_1.pcap": {
+    "class": "c2_beaconing",
+    "family": "Qakbot",
+    "date": "2022/11/14",
+    "malicious_ips": [
+      "109.11.175.42",
+      "109.149.147.221",
+      "109.218.233.44",
+      "178.169.196.115",
+      "190.11.198.68",
+      "190.74.23.139",
+      "194.165.16.90",
+      "2.83.62.105",
+      "200.44.208.217",
+      "213.67.255.57",
+      "213.91.235.146",
+      "23.111.114.52",
+      "37.252.0.102",
+      "50.37.154.115",
+      "69.133.162.35",
+      "70.95.236.129",
+      "77.126.81.208",
+      "78.31.67.7",
+      "79.37.204.67",
+      "80.13.179.151",
+      "82.121.237.106",
+      "82.155.111.187",
+      "82.34.170.37",
+      "86.165.15.180",
+      "86.45.66.141",
+      "88.152.182.39",
+      "89.216.114.163",
+      "90.162.45.154",
+      "92.137.74.174",
+      "92.191.49.255",
+      "92.207.132.174",
+      "92.27.86.48",
+      "95.94.33.189"
+    ],
+    "malicious_domains": [
+      "broadcom.com",
+      "cisco.com",
+      "oracle.com",
+      "vipsauna.com",
+      "www.broadcom.com",
+      "www.cisco.com",
+      "www.oracle.com",
+      "www.xfinity.com",
+      "www.yahoo.com",
+      "xfinity.com",
+      "yahoo.com"
+    ]
+  },
+  "Gozi_2023-07-12.pcap": {
+    "class": "c2_beaconing",
+    "family": "Gozi",
+    "date": "2023/07/12",
+    "malicious_ips": [
+      "151.248.117.244",
+      "170.130.55.162",
+      "188.127.224.25",
+      "193.149.176.60",
+      "194.58.102.187",
+      "91.199.147.95"
+    ],
+    "malicious_domains": [
+      "diwdjndsfnj.ru",
+      "iamupdate.com",
+      "iwqdndomdn.su",
+      "softwaredw.com"
+    ]
+  },
+  "Remcos_2023-05-29.pcap": {
+    "class": "c2_beaconing",
+    "family": "Remcos",
+    "date": "2023/05/29",
+    "malicious_ips": [
+      "146.70.158.105",
+      "3.135.201.214",
+      "88.99.82.246"
+    ],
+    "malicious_domains": [
+      "cp2-de1.host-global.net",
+      "ec2-3-135-201-214.us-east-2.compute.amazonaws.com",
+      "geoplugin.net",
+      "json.jp",
+      "u7xd4q.bn.files.1drv.com"
+    ]
+  },
+  "Emotet_2022-11-07_0.pcap": {
+    "class": "c2_beaconing",
+    "family": "Emotet",
+    "date": "2022/11/07",
+    "malicious_ips": [
+      "103.144.139.156",
+      "103.42.56.15",
+      "134.209.118.141",
+      "144.173.110.28",
+      "155.182.198.198",
+      "183.125.56.150",
+      "188.172.189.108",
+      "193.211.15.111",
+      "208.226.164.254",
+      "212.48.233.55",
+      "220.193.225.180",
+      "39.65.8.170",
+      "4.167.227.222",
+      "5.61.44.218",
+      "56.50.75.119",
+      "73.13.11.238",
+      "86.184.196.254",
+      "87.251.67.168",
+      "87.251.67.176",
+      "94.232.43.213",
+      "94.232.43.216",
+      "95.254.227.139"
+    ],
+    "malicious_domains": [
+      "bayernbadabum.com",
+      "bikkviz.com",
+      "blacksebo.de",
+      "chist.com",
+      "coadymarine.com",
+      "newscommercde.com",
+      "nrwmarkettoys.com",
+      "spkdeutshnewsupp.com"
+    ]
+  },
+  "Emotet_2022-11-07_1.pcap": {
+    "class": "c2_beaconing",
+    "family": "Emotet",
+    "date": "2022/11/07",
+    "malicious_ips": [
+      "103.144.139.156",
+      "103.42.56.15",
+      "134.209.118.141",
+      "144.173.110.28",
+      "155.182.198.198",
+      "183.125.56.150",
+      "188.172.189.108",
+      "193.211.15.111",
+      "208.226.164.254",
+      "212.48.233.55",
+      "220.193.225.180",
+      "39.65.8.170",
+      "4.167.227.222",
+      "5.61.44.218",
+      "56.50.75.119",
+      "73.13.11.238",
+      "86.184.196.254",
+      "87.251.67.168",
+      "87.251.67.176",
+      "94.232.43.213",
+      "94.232.43.216",
+      "95.254.227.139"
+    ],
+    "malicious_domains": [
+      "bayernbadabum.com",
+      "bikkviz.com",
+      "blacksebo.de",
+      "chist.com",
+      "coadymarine.com",
+      "newscommercde.com",
+      "nrwmarkettoys.com",
+      "spkdeutshnewsupp.com"
+    ]
+  },
+  "AgentTesla_2023-01-05.pcap": {
+    "class": "exfil",
+    "family": "AgentTesla",
+    "date": "2023/01/05",
+    "malicious_ips": [
+      "185.250.254.32",
+      "204.11.58.28",
+      "45.56.99.101"
+    ],
+    "malicious_domains": [
+      "mail.transgear.in"
+    ]
+  },
+  "XLoader_2023-07-11.pcap": {
+    "class": "exfil",
+    "family": "XLoader",
+    "date": "2023/07/11",
+    "malicious_ips": [
+      "23.94.236.203"
+    ],
+    "malicious_domains": [
+      "kyliansuperm92139124.shop",
+      "www.6882b.com",
+      "www.730fk.xyz",
+      "www.aamset-paris.com",
+      "www.alanyatourism.xyz",
+      "www.ambadisuites.com",
+      "www.atlasmarketing.life",
+      "www.autolifebelt.com",
+      "www.bluhenhalfte.xyz",
+      "www.collingswoodfd.com",
+      "www.fn29in.xyz",
+      "www.hhfootball.com",
+      "www.iweb-sa.com",
+      "www.kalndarapp14.com",
+      "www.kdu21.com",
+      "www.latabledelepicier.com",
+      "www.london168wallet.monster",
+      "www.personifycoach.com",
+      "www.poultry-symposium.com",
+      "www.printmyride.store",
+      "www.r1381.xyz",
+      "www.smartinnoventions.com",
+      "www.tarolstroy.store",
+      "www.terrenoscampestres.com",
+      "www.test-kobewaterworks.com",
+      "www.theartboxslidell.com",
+      "www.uximini.com",
+      "www.vidintros.shop",
+      "www.windmarkdijital.xyz",
+      "www.woman-86.com",
+      "www.wyyxscc5856.com",
+      "www.yahialocation.com",
+      "www.zsys.tech"
+    ]
+  },
+  "KoiStealer_2024-06-12.pcap": {
+    "class": "exfil",
+    "family": "KoiStealer",
+    "date": "2024/06/12",
+    "malicious_ips": [
+      "89.251.22.227"
+    ],
+    "malicious_domains": [
+      "lechiavetteusb.it",
+      "mawyon.com",
+      "mucecsas.com"
+    ]
+  },
+  "Metastealer_2023-04-13.pcap": {
+    "class": "exfil",
+    "family": "Metastealer",
+    "date": "2023/04/13",
+    "malicious_ips": [
+      "109.248.42.11",
+      "185.172.129.192"
+    ],
+    "malicious_domains": [
+      "almassa.site",
+      "kvckz.engineercoin.xyz",
+      "mail.almassa.site",
+      "mmswgeewswyyywqk.xyz",
+      "review.one",
+      "wgcuwcgociewewoo.xyz"
+    ]
+  },
+  "Lumma_2025-12-30.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/12/30",
+    "malicious_ips": [],
+    "malicious_domains": [
+      "gorcerie.com",
+      "memory-scanner.cc",
+      "pastebin.com"
+    ]
+  },
+  "Lumma_2025-09-24.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/09/24",
+    "malicious_ips": [
+      "164.90.129.126",
+      "86.54.24.25",
+      "91.212.166.19",
+      "91.84.106.132"
+    ],
+    "malicious_domains": [
+      "4bind3.cfd",
+      "abbaspcs.info",
+      "hitmeup.space",
+      "www.facebook.com"
+    ]
+  },
+  "Lumma_2025-08-13.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/08/13",
+    "malicious_ips": [],
+    "malicious_domains": [
+      "arch.verif743.sbs",
+      "kletkamozga.ru",
+      "mastwin.in",
+      "ordinarniyvrach.ru",
+      "secrequ.top",
+      "stolewnica.ru",
+      "urluss.com",
+      "vishneviyjazz.ru",
+      "visokiywkaf.ru",
+      "www.facebook.com",
+      "yamakrug.ru",
+      "yrokistorii.ru"
+    ]
+  },
+  "Lumma_2025-08-15.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/08/15",
+    "malicious_ips": [
+      "5.10.250.239"
+    ],
+    "malicious_domains": [
+      "desk-app-now.com",
+      "filesclosedset.icu",
+      "keygen-win.org",
+      "kletkamozga.ru",
+      "lokrlogalshit.icu",
+      "mastwin.in",
+      "mastwinp.in",
+      "media98pc4.info",
+      "ordinarniyvrach.ru",
+      "stolewnica.ru",
+      "vishneviyjazz.ru",
+      "visokiywkaf.ru",
+      "winsofthub.com",
+      "www.facebook.com",
+      "yamakrug.ru",
+      "yrokistorii.ru"
+    ]
+  },
+  "Lumma_2025-07-02.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/07/02",
+    "malicious_ips": [
+      "144.172.115.212",
+      "185.117.90.230",
+      "86.54.25.40"
+    ],
+    "malicious_domains": [
+      "8diaprinzpistpe.blogspot.com",
+      "batman.com",
+      "eset-blacklist.net",
+      "ponqcf.top",
+      "urluss.com",
+      "vittuv.com",
+      "www.facebook.com"
+    ]
+  },
+  "Lumma_2025-07-15.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/07/15",
+    "malicious_ips": [
+      "167.160.151.12",
+      "80.64.19.63"
+    ],
+    "malicious_domains": [
+      "4bind3.cfd",
+      "annwt.xyz",
+      "bardj.xyz",
+      "desk-app-now.com",
+      "dryzc.xyz",
+      "dzyzb.xyz",
+      "intro.com",
+      "linkofile.click",
+      "mindzenithelite.com",
+      "protected.com",
+      "prvqhm.shop",
+      "softwarescr.com",
+      "sorrij.top",
+      "ungryo.shop",
+      "vervzv.xyz",
+      "www.facebook.com",
+      "zulmie.sbs"
+    ]
+  },
+  "Lumma_2025-09-03.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/09/03",
+    "malicious_ips": [
+      "64.95.13.172",
+      "85.209.129.105",
+      "91.212.166.160"
+    ],
+    "malicious_domains": [
+      "georgej.ru",
+      "louglas.com",
+      "maintaining-shelter-bailey-ordinance.trycloudflare.com",
+      "www.sepco.com"
+    ]
+  },
+  "Lumma_2025-06-26.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/06/26",
+    "malicious_ips": [
+      "144.172.112.32",
+      "144.172.115.212",
+      "86.54.25.40"
+    ],
+    "malicious_domains": [
+      "arch.verif743.sbs",
+      "ckonti.com",
+      "genhqq.xyz",
+      "media.cloud839v1.cfd",
+      "metallurgify.com",
+      "t.co",
+      "tired.com",
+      "www.facebook.com"
+    ]
+  },
+  "StealC_2025-06-18.pcap": {
+    "class": "exfil",
+    "family": "StealC",
+    "date": "2025/06/18",
+    "malicious_ips": [
+      "83.229.17.68",
+      "94.158.245.135"
+    ],
+    "malicious_domains": [
+      "eddereklam.com",
+      "islonline.org",
+      "lqsword.top",
+      "n.com",
+      "pastebin.com",
+      "www.proofpoint.com",
+      "www.textingworld.com",
+      "www.threatdown.com"
+    ]
+  },
+  "StealC_2025-05-22.pcap": {
+    "class": "exfil",
+    "family": "StealC",
+    "date": "2025/05/22",
+    "malicious_ips": [
+      "62.60.226.188"
+    ],
+    "malicious_domains": [
+      "everyone.com",
+      "fancli.com"
+    ]
+  },
+  "XLoader_2025-01-30.pcap": {
+    "class": "exfil",
+    "family": "XLoader",
+    "date": "2025/01/30",
+    "malicious_ips": [
+      "141.98.10.165"
+    ],
+    "malicious_domains": [
+      "saffronshipping.com",
+      "www.031234990.xyz",
+      "www.031235246.xyz",
+      "www.67051.app",
+      "www.antobloom.xyz",
+      "www.arryongro-nambe.live",
+      "www.autonomousrich.xyz",
+      "www.avisos-bbva.info",
+      "www.besttreasurespot.shop",
+      "www.bitcoinescort.xyz",
+      "www.bjogo.top",
+      "www.bydotoparca.net",
+      "www.car-select.online",
+      "www.clouser.store",
+      "www.corellia.pro",
+      "www.covsds.info",
+      "www.coxswain.art",
+      "www.dangky88kfree.online",
+      "www.devnorms.xyz",
+      "www.dogebonus.xyz",
+      "www.exhelp.xyz",
+      "www.ezjytrkuqlw.info",
+      "www.fjlgyc.info",
+      "www.fz977.xyz",
+      "www.hotethereum.xyz",
+      "www.jili999.net",
+      "www.l51127.xyz",
+      "www.laohuc58.net",
+      "www.maplez.online",
+      "www.micusa.xyz",
+      "www.mujde.info",
+      "www.physicsbrain.xyz",
+      "www.prepaidbitcoin.xyz",
+      "www.rtphajar4d.art",
+      "www.satoshichecker.xyz",
+      "www.serenityos.dev",
+      "www.sigaque.today",
+      "www.spadessyndicate.net",
+      "www.tabs123.xyz",
+      "www.tokosayur.shop",
+      "www.topked.top",
+      "www.travel-cure.sbs",
+      "www.uarsg.xyz",
+      "www.zscaler.com"
+    ]
+  },
+  "Lumma_2025-02-13.pcap": {
+    "class": "exfil",
+    "family": "Lumma",
+    "date": "2025/02/13",
+    "malicious_ips": [
+      "91.206.178.120"
+    ],
+    "malicious_domains": [
+      "blast-hubs.com",
+      "blastikcn.com",
+      "generalmills.pro",
+      "mercharena.biz",
+      "nestlecompany.pro",
+      "steamcommunity.com",
+      "stormlegue.com",
+      "www.littlemoroccanthings.com",
+      "www.ridgefieldrecovery.com"
+    ]
+  },
+  "XLoader_2025-09-05.pcap": {
+    "class": "exfil",
+    "family": "XLoader",
+    "date": "2025/09/05",
+    "malicious_ips": [
+      "45.92.29.152"
+    ],
+    "malicious_domains": [
+      "alhathboor.com",
+      "www.01vk.top",
+      "www.02eg.top",
+      "www.43zwv8yn.top",
+      "www.agconcrete.info",
+      "www.b00z6v.top",
+      "www.barddeveloper.xyz",
+      "www.bearstonerd.online",
+      "www.bf-060.club",
+      "www.bsuhdcssfh.xyz",
+      "www.cladepio.xyz",
+      "www.codingcomputer.xyz",
+      "www.datecalc.net",
+      "www.dirtyductsdallas.info",
+      "www.dollarshaveclub.com",
+      "www.donmai.us",
+      "www.dzkky.xyz",
+      "www.earnbnb.xyz",
+      "www.eddiesmith.xyz",
+      "www.farben-shop.net",
+      "www.fb0gxq.top",
+      "www.fhm.com.tw",
+      "www.flokix.top",
+      "www.fxnetworks.com",
+      "www.g732b1.top",
+      "www.galaxyspaces.online",
+      "www.gamersinvest.xyz",
+      "www.geektv.me",
+      "www.gxml66.top",
+      "www.i17id8.top",
+      "www.jeuxjeuxjeux.fr",
+      "www.linklaters.tech",
+      "www.livingandgivingsd.org",
+      "www.ls170.top",
+      "www.mainenugs.net",
+      "www.meczyki.pl",
+      "www.mstelecome.top",
+      "www.nfrinfo.art",
+      "www.nhacaiw88.net",
+      "www.o7wk02.top",
+      "www.printerapp.xyz",
+      "www.qcarmoring.net",
+      "www.rajaclubathletic.net",
+      "www.rvsrdp.top",
+      "www.sanduk.xyz",
+      "www.simracingindia.org",
+      "www.thealnwickgarden.net",
+      "www.translateplatform.xyz",
+      "www.tvvpg.vip",
+      "www.ugfnonline.top",
+      "www.vipcortex.xyz",
+      "www.vrlpn6.top",
+      "www.wibtogelr.cfd",
+      "www.zgm3if.vip"
+    ]
+  },
+  "Strela_2025-02-10.pcap": {
+    "class": "exfil",
+    "family": "Strela",
+    "date": "2025/02/10",
+    "malicious_ips": [
+      "184.22.240.19",
+      "193.143.1.205"
+    ],
+    "malicious_domains": [
+      "184-22-240-0.24.nat.sila1-cgn01.myaisfibre.com",
+      "angelagudotravel.com"
+    ]
+  },
+  "KoiStealer_2025-01-23.pcap": {
+    "class": "exfil",
+    "family": "KoiStealer",
+    "date": "2025/01/23",
+    "malicious_ips": [
+      "79.124.78.109"
+    ],
+    "malicious_domains": []
+  },
+  "Rhadamanthys_2025-10-01.pcap": {
+    "class": "exfil",
+    "family": "Rhadamanthys",
+    "date": "2025/10/01",
+    "malicious_ips": [
+      "104.164.55.44"
+    ],
+    "malicious_domains": [
+      "2fwww.zdescargas.org",
+      "afile2.com",
+      "arch.cloud341.click",
+      "www.zdescargas.org"
+    ]
+  },
+  "StealC_2025-08-20.pcap": {
+    "class": "exfil",
+    "family": "StealC",
+    "date": "2025/08/20",
+    "malicious_ips": [
+      "38.146.28.242",
+      "79.141.165.202"
+    ],
+    "malicious_domains": [
+      "cf-2-up.com",
+      "dieselfilters.com",
+      "islonline.org",
+      "woop-bicks.com"
+    ]
+  },
+  "KoiStealer_2025-07-08.pcap": {
+    "class": "exfil",
+    "family": "KoiStealer",
+    "date": "2025/07/08",
+    "malicious_ips": [
+      "193.29.57.167"
+    ],
+    "malicious_domains": [
+      "conleyuniversity.us",
+      "nasilics.com"
+    ]
+  }
+}

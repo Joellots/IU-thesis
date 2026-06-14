@@ -1,8 +1,12 @@
 .env/
 data/
 eval_results*
-!pcaps/mta/ioc_manifest.json
 models/
-pcaps/
-*/__pycache__
+__pycache__/
 services/nfstream/output/*
+
+# Ignore all PCAPs/derived data, but keep the IOC manifest (pins the dataset)
+pcaps/*
+!pcaps/mta/
+pcaps/mta/*
+!pcaps/mta/ioc_manifest.json

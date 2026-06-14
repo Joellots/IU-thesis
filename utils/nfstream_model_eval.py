@@ -285,11 +285,15 @@ def extract_all_pcaps(
 # Balancing / subsampling
 # ─────────────────────────────────────────────────────────────────────────────
 
+ENCRYPTED_PORTS = {443, 465, 993, 995, 853}
+
+
 def balance_flows(
     df: pd.DataFrame,
     min_packets: int = 0,
     max_per_pcap: int = 0,
     balance: bool = False,
+    encrypted_only: bool = False,
     seed: int = 42,
 ) -> pd.DataFrame:
     """
@@ -310,13 +314,26 @@ def balance_flows(
     All sampling uses `seed` for reproducibility. Flows with no true_label
     (exploration mode) are passed through untouched by the balance step.
     """
-    if not any([min_packets, max_per_pcap, balance]):
+    if not any([min_packets, max_per_pcap, balance, encrypted_only]):
         return df
 
     n_start = len(df)
     log.info("\n" + "═" * 60)
     log.info(" Balancing / subsampling")
     log.info("═" * 60)
+
+    # 0 ── encrypted-only: keep TLS-detected flows (nDPI) ∪ encrypted ports.
+    # Matches the source paper's Zeek-based TLS filtering and the training
+    # build; catches TLS on non-standard ports that a port filter would miss.
+    if encrypted_only:
+        before = len(df)
+        app = df.get("application_name", pd.Series(index=df.index, dtype=object)).fillna("").str.upper()
+        tls_proto = app.str.contains("TLS|SSL|QUIC|DTLS", regex=True)
+        sp = df.get("src_port", pd.Series(index=df.index, dtype=object))
+        dp = df.get("dst_port", pd.Series(index=df.index, dtype=object))
+        port_enc = dp.isin(ENCRYPTED_PORTS) | sp.isin(ENCRYPTED_PORTS)
+        df = df[tls_proto | port_enc]
+        log.info(f"  encrypted-only (TLS protocol ∪ ports {sorted(ENCRYPTED_PORTS)}): {before} → {len(df)} flows")
 
     # 1 ── minimum packet filter (bidirectional, multi-packet flows only)
     if min_packets and "bidirectional_packets" in df.columns:
@@ -568,6 +585,9 @@ def main():
     parser.add_argument("--balance", action="store_true",
                         help="Downsample the majority class to match the minority "
                              "for a 1:1 malicious:benign evaluation set")
+    parser.add_argument("--encrypted-only", action="store_true",
+                        help="Keep only TLS-detected flows (nDPI) or flows on encrypted "
+                             "ports (443/465/993/995/853) — matches the training build")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for subsampling (default: 42)")
     args = parser.parse_args()
@@ -593,6 +613,7 @@ def main():
         min_packets=args.min_packets,
         max_per_pcap=args.max_flows_per_pcap,
         balance=args.balance,
+        encrypted_only=args.encrypted_only,
         seed=args.seed,
     )
 

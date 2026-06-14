@@ -1,0 +1,19 @@
+# Dependencies for model retraining (model_training/retrain_nfstream_model.ipynb)
+# Versions pinned to match the inference service so the serialised mapper loads cleanly.
+
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+scikit-learn==1.4.2
+joblib==1.4.2
+xgboost==2.0.3
+interpret==0.6.1          # EBM (ExplainableBoostingClassifier)
+
+# Jupyter (to run the notebook)
+jupyterlab==4.2.0
+ipykernel==6.29.4
+
+# Optional — only for the XAI / SHAP exploration in the reference notebook
+# shap==0.45.1
+# lime==0.2.0.1
+# matplotlib==3.9.0
