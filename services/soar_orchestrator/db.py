@@ -34,34 +34,15 @@ def ensure_bookkeeping_table(cur) -> None:
 def pick_next_alert(conn, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Returns alert rows that have not been processed by the orchestrator yet.
+
+    Selects a.* on purpose: the translator owns the alerts schema and evolves
+    it (startup ALTERs), so an explicit column list here would break on every
+    schema change. Downstream code reads fields via .get() with defaults, so
+    extra or missing columns degrade gracefully instead of crashing the poll
+    loop.
     """
     sql = """
-        SELECT
-            a.id,
-            a.flow_id,
-            a.sent_ts,
-            a.inferred_ts,
-            a.translated_ts,
-            a.model,
-            a.tier,
-            a.pred_label,
-            a.pred_proba,
-            a.true_label,
-            a.explain_time_ms,
-            a.top_k_features,
-            a.top_k_json,
-            a.observables,
-            a.mitre_ttps,
-            a.mitre_names,
-            a.severity,
-            a.severity_label,
-            a.annotation,
-            a.n_ttps_matched,
-            a.mapping_confidence,
-            a.mapping_version,
-            a.mapping_status,
-            a.mapping_reason,
-            a.analyst_decision
+        SELECT a.*
         FROM alerts a
         LEFT JOIN soar_orchestrator_bookkeeping b
           ON b.alert_id = a.id

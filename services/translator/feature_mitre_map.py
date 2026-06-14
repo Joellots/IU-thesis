@@ -267,6 +267,29 @@ FEATURE_MITRE_MAP = {
     },
 }
 
+# ── Mapping metadata ──────────────────────────────────────────────────────────
+# Version stamp persisted with every alert (alerts.mapping_version) so results
+# can be attributed to the mapping table that produced them after rule changes.
+MAPPING_VERSION = "fmm-1.1.0"
+
+# Keyword fallback for top-k features that have no explicit rule (or whose
+# contribution direction did not match). Produces mapping_status =
+# "unmapped_heuristic": the orchestrator drops these at the TheHive gate in
+# strict mode but can triage them when REQUIRE_STRICT_MAPPED=false.
+KEYWORD_TTP_RULES = [
+    ("interval_of_arrival", "T1071", "Application Layer Protocol"),
+    ("time_difference",     "T1071", "Application Layer Protocol"),
+    ("time_to_live",        "T1071", "Application Layer Protocol"),
+    ("windows_size",        "T1095", "Non-Application Layer Protocol"),
+    ("payload",             "T1573", "Encrypted Channel"),
+    ("length_of_ip",        "T1041", "Exfiltration Over C2 Channel"),
+]
+
+# Last-resort TTP for malicious flows where neither explicit rules nor the
+# keyword heuristic matched (mapping_status = "unmapped").
+FALLBACK_TTP = ("T1595", "Active Scanning")
+
+
 # ── Severity scoring ──────────────────────────────────────────────────────────
 def compute_severity(pred_proba: float, n_matched_features: int) -> int:
     """
@@ -307,10 +330,12 @@ def translate(alert: dict) -> dict:
     """
     top_k     = alert.get("top_k_json", [])
     pred_proba = float(alert.get("pred_proba", 0.0))
+    pred_label = int(alert.get("pred_label", 0) or 0)
 
     matched_ttps  = []
     matched_names = []
     annotations   = []
+    matched_features = []
 
     for entry in top_k:
         feature   = entry.get("feature", "")
@@ -331,12 +356,57 @@ def translate(alert: dict) -> dict:
             matched_ttps.append(mitre_id)
             matched_names.append(mapping["mitre_name"])
 
+        matched_features.append(f"{feature}→{mitre_id}")
         annotations.append(
             f"[{feature}] {mapping['annotation']}"
         )
 
-    severity_int   = compute_severity(pred_proba, len(matched_ttps))
+    # Severity reflects explicit rule matches only — heuristic/fallback TTPs
+    # added below are provenance-tagged context, not corroborating evidence.
+    n_explicit     = len(matched_ttps)
+    severity_int   = compute_severity(pred_proba, n_explicit)
     severity_label = SEVERITY_LABEL[severity_int]
+
+    # ── Mapping provenance metadata (consumed by the SOAR orchestrator) ──────
+    if n_explicit >= 1:
+        mapping_status = "mapped"
+        # Fraction of top-k evidence covered by explicit rules.
+        mapping_confidence = round(len(annotations) / max(len(top_k), 1), 2)
+        mapping_reason = (
+            f"{len(annotations)}/{len(top_k)} top-k features matched explicit "
+            f"rules: {'; '.join(matched_features)}"
+        )
+    elif pred_label == 1:
+        heuristic_hits = []
+        for entry in top_k:
+            feature_lc = str(entry.get("feature", "")).lower()
+            for keyword, ttp, name in KEYWORD_TTP_RULES:
+                if keyword in feature_lc:
+                    heuristic_hits.append(f"{entry.get('feature')}~{keyword}→{ttp}")
+                    if ttp not in matched_ttps:
+                        matched_ttps.append(ttp)
+                        matched_names.append(name)
+                    break
+        if heuristic_hits:
+            mapping_status = "unmapped_heuristic"
+            mapping_confidence = 0.30
+            mapping_reason = (
+                "No explicit rule matched; keyword heuristic assigned: "
+                + "; ".join(heuristic_hits)
+            )
+        else:
+            mapping_status = "unmapped"
+            mapping_confidence = 0.0
+            matched_ttps.append(FALLBACK_TTP[0])
+            matched_names.append(FALLBACK_TTP[1])
+            mapping_reason = (
+                "No explicit or heuristic rule matched top-k features; "
+                f"fallback {FALLBACK_TTP[0]} assigned for observability"
+            )
+    else:
+        mapping_status = "unmapped"
+        mapping_confidence = 0.0
+        mapping_reason = "Benign flow — no explicit rules matched; no fallback assigned"
 
     # Build human-readable annotation block
     if alert.get("pred_label") == 1:
@@ -360,5 +430,13 @@ def translate(alert: dict) -> dict:
         "severity":        severity_int,
         "severity_label":  severity_label,
         "annotation":      annotation_header,
+        # Counts the final TTP list (incl. heuristic/fallback) — the
+        # orchestrator's n_ttps_matched >= 1 gate must pass for heuristic
+        # alerts when strict mapping is relaxed; provenance lives in
+        # mapping_status, not in this count.
         "n_ttps_matched":  len(matched_ttps),
+        "mapping_status":     mapping_status,
+        "mapping_confidence": mapping_confidence,
+        "mapping_version":    MAPPING_VERSION,
+        "mapping_reason":     mapping_reason,
     }

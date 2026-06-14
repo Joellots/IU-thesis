@@ -26,6 +26,7 @@ Environment variables:
 """
 
 import os
+import re
 import json
 import time
 import joblib
@@ -129,6 +130,31 @@ def make_producer(retries: int = 20, delay: int = 3) -> KafkaProducer:
                         attempt, retries, delay)
             time.sleep(delay)
     raise RuntimeError("Could not connect producer to Kafka")
+
+
+# ── SOAR context passthrough ──────────────────────────────────────────────────
+# Identifier-ish fields (IPs, ports, domains) are not model features, but the
+# translator needs them to build observables for the SOAR orchestrator.
+# Matching by name pattern instead of a fixed column list keeps this working
+# when the dataset schema changes (source_IP_address vs src_ip etc.).
+CONTEXT_KEY_RE = re.compile(
+    r"(ip_address|(^|_)(src|source|dst|destination)_?ip$|(^|_)port$"
+    r"|server_name|domain|hostname|(^|_)url$|^protocol$)",
+    re.IGNORECASE,
+)
+
+
+def extract_context(payload: dict) -> dict:
+    """Collect identifier fields from the producer message (top level and the
+    features dict) to forward alongside model output."""
+    context = {}
+    for source in (payload.get("features") or {}, payload):
+        for key, value in source.items():
+            if value is None or isinstance(value, (dict, list)):
+                continue
+            if CONTEXT_KEY_RE.search(str(key)):
+                context[key] = value
+    return context
 
 
 # ── Feature preparation ───────────────────────────────────────────────────────
@@ -267,9 +293,11 @@ def main():
 
         # ── Publish all records for this flow to alerts topic ─────────────
         inferred_ts = datetime.now(timezone.utc).isoformat()
+        context     = extract_context(payload)
         for rec in records:
             rec["sent_ts"]     = sent_ts
             rec["inferred_ts"] = inferred_ts
+            rec["context"]     = context
             producer.send(OUTPUT_TOPIC, value=rec)
 
         processed += 1

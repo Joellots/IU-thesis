@@ -10,9 +10,11 @@ in the raw_explanations table for audit/research purposes.
 """
 
 import os
+import re
 import json
 import time
 import logging
+import ipaddress
 from datetime import datetime, timezone
 
 import psycopg2
@@ -50,6 +52,94 @@ def get_db(retries: int = 20, delay: int = 3):
     raise RuntimeError("Could not connect to PostgreSQL")
 
 
+# Columns the translator owns beyond the base schema.sql definition. Applied
+# idempotently at startup so older databases (created before these fields
+# existed) are migrated in place — the SOAR orchestrator reads them.
+ALERT_COLUMN_MIGRATIONS = {
+    "observables":        "JSONB",
+    "mapping_confidence": "DOUBLE PRECISION",
+    "mapping_version":    "TEXT",
+    "mapping_status":     "TEXT",
+    "mapping_reason":     "TEXT",
+}
+
+
+def ensure_alerts_schema(cur, retries: int = 20, delay: int = 3):
+    """Waits for the alerts table (created by the postgres init script),
+    then adds any translator-owned columns that are missing."""
+    for attempt in range(1, retries + 1):
+        cur.execute("SELECT to_regclass('public.alerts')")
+        if cur.fetchone()[0] is not None:
+            break
+        log.warning("alerts table not ready (%d/%d) — retrying in %ds",
+                    attempt, retries, delay)
+        time.sleep(delay)
+    else:
+        raise RuntimeError("alerts table never appeared — check postgres init")
+
+    for column, col_type in ALERT_COLUMN_MIGRATIONS.items():
+        cur.execute(
+            f"ALTER TABLE alerts ADD COLUMN IF NOT EXISTS {column} {col_type}"
+        )
+    log.info("alerts schema ensured (%d translator-owned columns)",
+             len(ALERT_COLUMN_MIGRATIONS))
+
+
+# ── Observable extraction ─────────────────────────────────────────────────────
+# Identifier fields are matched by *name pattern*, not a fixed column list, so
+# the pipeline keeps working when the dataset schema changes (e.g.
+# source_IP_address vs src_ip). Values are validated before being typed.
+_IP_KEY_RE     = re.compile(r"(ip_address|(^|_)(src|source|dst|destination)_?ip$)", re.I)
+_DOMAIN_KEY_RE = re.compile(r"(server_name|domain|hostname)", re.I)
+_URL_KEY_RE    = re.compile(r"(^|_)url$", re.I)
+_SRC_KEY_RE    = re.compile(r"(^|_)(src|source)", re.I)
+_DST_KEY_RE    = re.compile(r"(^|_)(dst|destination)", re.I)
+
+
+def extract_observables(alert: dict) -> list:
+    """Builds the alerts.observables list ([{type, value, role?}, ...]) from
+    the alert's context fields. Types align with the orchestrator's Cortex
+    analyzer routing: ip / domain / url."""
+    observables, seen = [], set()
+    sources = [alert.get("context") or {}, alert]
+
+    for source in sources:
+        for key, value in source.items():
+            if value is None or isinstance(value, (dict, list)):
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+
+            if _IP_KEY_RE.search(key):
+                try:
+                    ip = ipaddress.ip_address(text)
+                except ValueError:
+                    continue
+                if ip.is_unspecified or ip.is_loopback:
+                    continue
+                obs_type = "ip"
+            elif _URL_KEY_RE.search(key):
+                obs_type = "url"
+            elif _DOMAIN_KEY_RE.search(key):
+                obs_type = "domain"
+            else:
+                continue
+
+            if (obs_type, text) in seen:
+                continue
+            seen.add((obs_type, text))
+
+            obs = {"type": obs_type, "value": text}
+            if _SRC_KEY_RE.search(key):
+                obs["role"] = "src"
+            elif _DST_KEY_RE.search(key):
+                obs["role"] = "dst"
+            observables.append(obs)
+
+    return observables
+
+
 def insert_alert(cur, record: dict):
     """Insert enriched alert into the alerts table."""
     cur.execute("""
@@ -58,13 +148,17 @@ def insert_alert(cur, record: dict):
             model, tier, pred_label, pred_proba, true_label,
             explain_time_ms, top_k_features, top_k_json,
             mitre_ttps, mitre_names, severity, severity_label,
-            annotation, n_ttps_matched
+            annotation, n_ttps_matched,
+            observables, mapping_confidence, mapping_version,
+            mapping_status, mapping_reason
         ) VALUES (
             %(flow_id)s, %(sent_ts)s, %(inferred_ts)s, %(translated_ts)s,
             %(model)s, %(tier)s, %(pred_label)s, %(pred_proba)s, %(true_label)s,
             %(explain_time_ms)s, %(top_k_features)s, %(top_k_json)s,
             %(mitre_ttps)s, %(mitre_names)s, %(severity)s, %(severity_label)s,
-            %(annotation)s, %(n_ttps_matched)s
+            %(annotation)s, %(n_ttps_matched)s,
+            %(observables)s, %(mapping_confidence)s, %(mapping_version)s,
+            %(mapping_status)s, %(mapping_reason)s
         )
         ON CONFLICT (flow_id, model) DO NOTHING;
     """, {
@@ -73,6 +167,11 @@ def insert_alert(cur, record: dict):
         "top_k_json":    json.dumps(record.get("top_k_json", [])),
         "mitre_ttps":    json.dumps(record.get("mitre_ttps", [])),
         "mitre_names":   json.dumps(record.get("mitre_names", [])),
+        "observables":   json.dumps(record.get("observables", [])),
+        "mapping_confidence": record.get("mapping_confidence", 0.0),
+        "mapping_version":    record.get("mapping_version", "unknown"),
+        "mapping_status":     record.get("mapping_status", "unknown"),
+        "mapping_reason":     record.get("mapping_reason", ""),
     })
 
 
@@ -118,6 +217,7 @@ def make_consumer(retries: int = 20, delay: int = 3) -> KafkaConsumer:
 def main():
     conn     = get_db()
     cur      = conn.cursor()
+    ensure_alerts_schema(cur)
     consumer = make_consumer()
 
     log.info("Translator running — consuming from '%s'", INPUT_TOPIC)
@@ -139,6 +239,7 @@ def main():
 
         try:
             enriched = translate(alert)
+            enriched["observables"] = extract_observables(alert)
             insert_alert(cur, enriched)
             processed += 1
 

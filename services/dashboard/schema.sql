@@ -30,6 +30,14 @@ CREATE TABLE IF NOT EXISTS alerts (
     annotation       TEXT,
     n_ttps_matched   INTEGER,
 
+    -- SOAR enrichment (written by translator, consumed by soar_orchestrator;
+    -- the translator also adds these idempotently at startup for older DBs)
+    observables        JSONB,                -- [{"type": "ip"|"domain"|"url", "value": ..., "role": ...}]
+    mapping_confidence DOUBLE PRECISION,
+    mapping_version    TEXT,
+    mapping_status     TEXT,                 -- mapped / unmapped_heuristic / unmapped
+    mapping_reason     TEXT,
+
     -- Analyst decision (updated via dashboard)
     analyst_decision TEXT        DEFAULT 'pending',   -- pending/confirmed/dismissed
     analyst_ts       TIMESTAMPTZ,
