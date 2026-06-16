@@ -232,8 +232,6 @@ services:
     # Copy `.env.example` → `.env` and set THEHIVE_API_KEY, CORTEX_API_KEY (and any overrides).
     # `required: false` so fresh clones / CI can run `compose config` / `up` without the file.
     env_file:
-      # - path: .env
-      #   required: false
       - path: ./services/soar_orchestrator/.env
         required: false
     ports:

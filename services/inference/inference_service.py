@@ -139,7 +139,7 @@ def make_producer(retries: int = 20, delay: int = 3) -> KafkaProducer:
 # when the dataset schema changes (source_IP_address vs src_ip etc.).
 CONTEXT_KEY_RE = re.compile(
     r"(ip_address|(^|_)(src|source|dst|destination)_?ip$|(^|_)port$"
-    r"|server_name|domain|hostname|(^|_)url$|^protocol$)",
+    r"|server_name|domain|hostname|(^|_)url$|^protocol$|fingerprint)",
     re.IGNORECASE,
 )
 

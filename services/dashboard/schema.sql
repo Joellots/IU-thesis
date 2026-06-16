@@ -38,10 +38,13 @@ CREATE TABLE IF NOT EXISTS alerts (
     mapping_status     TEXT,                 -- mapped / unmapped_heuristic / unmapped
     mapping_reason     TEXT,
 
-    -- Analyst decision (updated via dashboard)
-    analyst_decision TEXT        DEFAULT 'pending',   -- pending/confirmed/dismissed
-    analyst_ts       TIMESTAMPTZ,
-    analyst_note     TEXT,
+    -- Analyst decision + feedback (Step 6; written by the dashboard endpoint)
+    analyst_decision   TEXT        DEFAULT 'pending',   -- pending / true_positive / false_positive
+                                                        -- (legacy confirmed=true_positive, dismissed=false_positive)
+    analyst_ts         TIMESTAMPTZ,
+    analyst_note       TEXT,
+    explanation_useful  BOOLEAN,                        -- was the XAI explanation useful?
+    flag_for_retraining BOOLEAN,                        -- include this flow in the next retraining set?
 
     UNIQUE (flow_id, model)
 );
@@ -63,12 +66,14 @@ CREATE TABLE IF NOT EXISTS raw_explanations (
 
 -- ── Analyst decisions log ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS analyst_decisions (
-    id               SERIAL PRIMARY KEY,
-    alert_id         INTEGER     REFERENCES alerts(id),
-    flow_id          TEXT,
-    decision         TEXT        NOT NULL,  -- confirmed / dismissed
-    note             TEXT,
-    decided_at       TIMESTAMPTZ DEFAULT NOW()
+    id                  SERIAL      PRIMARY KEY,
+    alert_id            INTEGER     REFERENCES alerts(id),
+    flow_id             TEXT,
+    decision            TEXT        NOT NULL,  -- true_positive / false_positive (legacy: confirmed / dismissed)
+    note                TEXT,
+    explanation_useful  BOOLEAN,               -- Step 6 feedback
+    flag_for_retraining BOOLEAN,               -- Step 6 feedback → retraining dataset
+    decided_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ── Indices for dashboard query performance ───────────────────────────────────

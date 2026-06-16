@@ -92,14 +92,15 @@ def ensure_alerts_schema(cur, retries: int = 20, delay: int = 3):
 _IP_KEY_RE     = re.compile(r"(ip_address|(^|_)(src|source|dst|destination)_?ip$)", re.I)
 _DOMAIN_KEY_RE = re.compile(r"(server_name|domain|hostname)", re.I)
 _URL_KEY_RE    = re.compile(r"(^|_)url$", re.I)
-_SRC_KEY_RE    = re.compile(r"(^|_)(src|source)", re.I)
-_DST_KEY_RE    = re.compile(r"(^|_)(dst|destination)", re.I)
+_JA3_KEY_RE    = re.compile(r"fingerprint", re.I)               # client/server_fingerprint → ja3
+_SRC_KEY_RE    = re.compile(r"(^|_)(src|source|client)", re.I)  # client_fingerprint → src
+_DST_KEY_RE    = re.compile(r"(^|_)(dst|destination|server)", re.I)  # server_fingerprint → dst
 
 
 def extract_observables(alert: dict) -> list:
     """Builds the alerts.observables list ([{type, value, role?}, ...]) from
     the alert's context fields. Types align with the orchestrator's Cortex
-    analyzer routing: ip / domain / url."""
+    analyzer routing: ip / domain / url / ja3 (TLS fingerprint → MISP)."""
     observables, seen = [], set()
     sources = [alert.get("context") or {}, alert]
 
@@ -123,6 +124,8 @@ def extract_observables(alert: dict) -> list:
                 obs_type = "url"
             elif _DOMAIN_KEY_RE.search(key):
                 obs_type = "domain"
+            elif _JA3_KEY_RE.search(key):
+                obs_type = "ja3"
             else:
                 continue
 
