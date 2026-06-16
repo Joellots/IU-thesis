@@ -1,440 +1,249 @@
 """
-feature_mitre_map.py
---------------------
-Maps XAI top-k feature attributions to MITRE ATT&CK technique IDs,
-generates human-readable SOC alert annotations, and computes severity.
+feature_mitre_map.py  —  feature → class → MITRE ATT&CK mapping (validated)
+---------------------------------------------------------------------------
+The XAI→SOAR translation layer and the thesis's core contribution: it maps the
+model's per-flow XAI feature attributions to a behavioural *class*, and the
+class to MITRE ATT&CK techniques, emitting a per-alert reliability score
+(`mapping_confidence`) the SOAR orchestrator uses as a trust gate.
 
-This is the XAI→SOAR translation layer — the thesis contribution that
-bridges the ML explanation output to operational security context.
+Design (v2 — feature → class → TTP):
+  1. FEATURE_CLASS_MAP — each validated feature votes for ONE behavioural class
+     with a value-direction and a confidence equal to its empirical reliability
+     (bootstrap top-k stability, 0–1, from model_training/feature_mitre_validation.ipynb).
+  2. translate() aggregates the malicious-pushing top-k features into a class
+     vote (weighted by confidence × |contribution|), picks the dominant class,
+     and assigns that class's TTPs (CLASS_TTP_MAP).
+  3. mapping_confidence = contribution-weighted mean stability of the matched
+     evidence; mapping_status = mapped / unmapped_heuristic / unmapped.
 
-Structure of each mapping entry:
-    feature_name → {
-        "direction":   "positive" | "negative" | "any"
-                       (contribution direction that is security-relevant)
-        "mitre_id":    ATT&CK technique ID
-        "mitre_name":  technique name
-        "tactic":      ATT&CK tactic
-        "annotation":  human-readable explanation for SOC analyst
-    }
+Empirical basis (4 methods agree — statistics + SHAP(binary) + SHAP(3-class) +
+EBM exact; bootstrap stability in parentheses):
+  • C2 beaconing  → HIGH TCP-payload length, TCP-window size, IP-packet length (0.98–1.00)
+  • Exfiltration  → LOW  inter-arrival / inter-packet timing                    (0.90–1.00)
+Literature citations for each link are added in Phase 4 (see `citation` field).
 """
 
-# ── Feature → MITRE ATT&CK Mapping ───────────────────────────────────────────
-# Based on security semantics analysis from the research paper (Section IV-G)
-FEATURE_MITRE_MAP = {
+import os
 
-    # ── TTL features ──────────────────────────────────────────────────────────
-    "std_time_to_live": {
-        "direction":  "negative",   # low variance → suspicious uniformity
-        "mitre_id":   "T1071",
-        "mitre_name": "Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Low TTL variance indicates traffic originates from a fixed OS "
-            "environment with rigid TTL initialisation, consistent with "
-            "malware using a single C2 host rather than heterogeneous "
-            "legitimate endpoints."
-        ),
-    },
-    "mean_time_to_live": {
-        "direction":  "any",
-        "mitre_id":   "T1071",
-        "mitre_name": "Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Anomalous mean TTL value suggests traffic does not conform to "
-            "expected OS-specific initial TTL values (64/128/255), "
-            "potentially indicating tunnelling or spoofed headers."
-        ),
-    },
-    "min_time_to_live": {
-        "direction":  "any",
-        "mitre_id":   "T1572",
-        "mitre_name": "Protocol Tunneling",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Unusually low minimum TTL across session packets may indicate "
-            "protocol tunnelling or traffic relayed through multiple hops "
-            "to obscure origin."
-        ),
-    },
+MAPPING_VERSION = "fmm-2.0.0"   # validated feature→class→TTP map
 
-    # ── Backward IAT features (C2 beaconing signatures) ───────────────────────
-    "std_Interval_of_arrival_time_of_backward_traffic": {
-        "direction":  "negative",   # low std → periodic/regular timing
-        "mitre_id":   "T1071.001",
-        "mitre_name": "Web Protocols",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Low backward IAT variance indicates highly regular server-to-client "
-            "response timing, consistent with automated C2 beaconing or polling "
-            "rather than human-driven HTTPS browsing with variable response times."
-        ),
-    },
-    "mean_Interval_of_arrival_time_of_backward_traffic": {
-        "direction":  "any",
-        "mitre_id":   "T1071.001",
-        "mitre_name": "Web Protocols",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Anomalous mean backward inter-arrival time deviates from typical "
-            "server response patterns, suggesting automated protocol exchanges "
-            "characteristic of C2 communication channels."
-        ),
-    },
-    "max_Interval_of_arrival_time_of_backward_traffic": {
-        "direction":  "positive",   # high max → burst/polling pattern
-        "mitre_id":   "T1071.001",
-        "mitre_name": "Web Protocols",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Elevated maximum backward IAT captures burst characteristics "
-            "of C2 polling cycles and keepalive patterns absent in "
-            "continuous human-driven sessions."
-        ),
-    },
-    "median_Interval_of_arrival_time_of_backward_traffic": {
-        "direction":  "any",
-        "mitre_id":   "T1071.001",
-        "mitre_name": "Web Protocols",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Atypical median backward IAT suggests non-human timing regularity "
-            "in server responses, consistent with automated malware communication."
-        ),
-    },
+# Ambiguity-margin gate: a class is asserted as "mapped" only when its weighted
+# vote share (dominance = winner / total class vote) clears this margin. Below it
+# the evidence is split between classes, so the TTP is asserted only tentatively
+# (mapping_status="unmapped_heuristic", reduced confidence) — this protects
+# precision on the minority/overlapping class (exfil). 0.5 = gate off (pure argmax).
+CLASS_MARGIN = float(os.getenv("MAPPING_CLASS_MARGIN", "0.60"))
 
-    # ── Forward IAT features ──────────────────────────────────────────────────
-    "mean_Interval_of_arrival_time_of_forward_traffic": {
-        "direction":  "any",
-        "mitre_id":   "T1071",
-        "mitre_name": "Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Anomalous mean forward IAT indicates non-human request pacing, "
-            "consistent with programmatic C2 client behaviour rather than "
-            "interactive browsing."
-        ),
-    },
-    "std_Interval_of_arrival_time_of_forward_traffic": {
-        "direction":  "negative",
-        "mitre_id":   "T1071",
-        "mitre_name": "Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Low forward IAT variance reflects regular, automated request "
-            "timing characteristic of malware polling a C2 endpoint on a "
-            "fixed schedule."
-        ),
-    },
-    "median_Interval_of_arrival_time_of_forward_traffic": {
-        "direction":  "any",
-        "mitre_id":   "T1071",
-        "mitre_name": "Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Atypical median forward IAT consistent with automated protocol "
-            "exchanges rather than human-initiated requests."
-        ),
-    },
 
-    # ── Payload change features ───────────────────────────────────────────────
-    "The_times_of_change_of_payload_per_session": {
-        "direction":  "negative",   # few changes → uniform encrypted payloads
-        "mitre_id":   "T1573",
-        "mitre_name": "Encrypted Channel",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Low payload size transition count indicates structurally uniform "
-            "session content. Automated malware C2 sessions exchange fixed-format "
-            "encrypted messages, producing fewer distinct payload sizes than "
-            "organic HTTPS sessions loading mixed content types."
-        ),
-    },
+# ── 1. Feature → behavioural class ───────────────────────────────────────────
+# direction = the feature VALUE direction that indicates the class ("high"/"low").
+# confidence = bootstrap top-k stability (per-feature reliability), used as the
+#              evidence weight and rolled up into the alert's mapping_confidence.
+# Malicious-indicating evidence always has a POSITIVE (malicious-pushing) XAI
+# contribution, so translate() only counts top-k entries with direction "positive".
+FEATURE_CLASS_MAP = {
+    # ── C2 beaconing: large, variable encrypted payloads + programmatic windows ──
+    "mean_Length_of_TCP_payload":   {"class": "c2_beaconing", "direction": "high", "confidence": 1.00},
+    "std_Length_of_TCP_payload":    {"class": "c2_beaconing", "direction": "high", "confidence": 1.00},
+    "max_Length_of_TCP_payload":    {"class": "c2_beaconing", "direction": "high", "confidence": 1.00},
+    "mean_TCP_windows_size_value":  {"class": "c2_beaconing", "direction": "high", "confidence": 1.00},
+    "std_TCP_windows_size_value":   {"class": "c2_beaconing", "direction": "high", "confidence": 1.00},
+    "median_TCP_windows_size_value":{"class": "c2_beaconing", "direction": "high", "confidence": 1.00},
+    "mean_Length_of_IP_packets":    {"class": "c2_beaconing", "direction": "high", "confidence": 1.00},
+    "std_Length_of_IP_packets":     {"class": "c2_beaconing", "direction": "high", "confidence": 0.98},
 
-    # ── TCP window features ───────────────────────────────────────────────────
-    "mean_TCP_windows_size_value": {
-        "direction":  "any",
-        "mitre_id":   "T1095",
-        "mitre_name": "Non-Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Atypical mean TCP window size suggests programmatic connection "
-            "management. Malware connections maintain fixed or OS-default window "
-            "sizes; organic browser traffic dynamically adjusts based on "
-            "application-layer backpressure."
-        ),
-    },
-    "std_TCP_windows_size_value": {
-        "direction":  "negative",
-        "mitre_id":   "T1095",
-        "mitre_name": "Non-Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Low TCP window size variance is consistent with malware using "
-            "fixed programmatic window settings rather than dynamic adjustment "
-            "typical of interactive applications."
-        ),
-    },
-    "median_TCP_windows_size_value": {
-        "direction":  "any",
-        "mitre_id":   "T1095",
-        "mitre_name": "Non-Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Atypical median window size deviates from expected OS-negotiated "
-            "values, suggesting non-standard protocol implementation."
-        ),
-    },
+    # ── Exfiltration: rapid, regular packet timing of bulk upload (low IAT) ──────
+    "mean_Interval_of_arrival_time_of_backward_traffic": {"class": "exfil", "direction": "low", "confidence": 1.00},
+    "std_Interval_of_arrival_time_of_backward_traffic":  {"class": "exfil", "direction": "low", "confidence": 1.00},
+    "max_Interval_of_arrival_time_of_backward_traffic":  {"class": "exfil", "direction": "low", "confidence": 0.90},
+    "mean_Interval_of_arrival_time_of_forward_traffic":  {"class": "exfil", "direction": "low", "confidence": 1.00},
+    "std_Interval_of_arrival_time_of_forward_traffic":   {"class": "exfil", "direction": "low", "confidence": 0.96},
+    "mean_Time_difference_between_packets_per_session":  {"class": "exfil", "direction": "low", "confidence": 1.00},
+}
 
-    # ── Packet length / IP features ───────────────────────────────────────────
-    "std_Length_of_IP_packets": {
-        "direction":  "negative",
-        "mitre_id":   "T1573",
-        "mitre_name": "Encrypted Channel",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Low IP packet length variance indicates encryption block-size "
-            "uniformity. Malware payloads exhibit lower variance than "
-            "legitimate traffic carrying variable-length application data."
-        ),
-    },
-    "max_Length_of_IP_packets": {
-        "direction":  "positive",
-        "mitre_id":   "T1041",
-        "mitre_name": "Exfiltration Over C2 Channel",
-        "tactic":     "Exfiltration",
-        "annotation": (
-            "Elevated maximum IP packet size may indicate data exfiltration "
-            "bursts within the encrypted session, consistent with bulk data "
-            "transfer to a C2 endpoint."
-        ),
-    },
 
-    # ── TCP header features ───────────────────────────────────────────────────
-    "std_Length_of_TCP_packet_header": {
-        "direction":  "negative",
-        "mitre_id":   "T1095",
-        "mitre_name": "Non-Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Low TCP header length variance indicates minimal TCP option "
-            "negotiation, consistent with malware connections that do not "
-            "negotiate optional TCP features beyond the minimum required."
+# ── 2. Class → MITRE ATT&CK techniques (top-level + sub-techniques) ───────────
+CLASS_TTP_MAP = {
+    "c2_beaconing": {
+        "tactic": "Command and Control",
+        "ttps": [
+            {"mitre_id": "T1071",     "mitre_name": "Application Layer Protocol"},
+            {"mitre_id": "T1071.001", "mitre_name": "Web Protocols"},
+            {"mitre_id": "T1573",     "mitre_name": "Encrypted Channel"},
+        ],
+        "summary": (
+            "Large, low-variance encrypted payloads and programmatic TCP-window "
+            "behaviour, consistent with automated C2 beaconing over an encrypted "
+            "channel rather than human-driven HTTPS browsing."
         ),
+        "citation": None,  # Phase 4
     },
-
-    # ── Time difference features ──────────────────────────────────────────────
-    "median_Time_difference_between_packets_per_session": {
-        "direction":  "any",
-        "mitre_id":   "T1071",
-        "mitre_name": "Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Atypical median inter-packet timing across the session is "
-            "inconsistent with human-driven browsing and suggests "
-            "automated protocol behaviour."
+    "exfil": {
+        "tactic": "Exfiltration",
+        "ttps": [
+            {"mitre_id": "T1041",     "mitre_name": "Exfiltration Over C2 Channel"},
+            {"mitre_id": "T1048.002", "mitre_name": "Exfiltration Over Asymmetric Encrypted Non-C2 Protocol"},
+        ],
+        "summary": (
+            "Rapid, regular inter-arrival timing (low IAT) characteristic of "
+            "sustained bulk data upload to an external endpoint over an encrypted "
+            "channel."
         ),
-    },
-    "mean_Time_difference_between_packets_per_session": {
-        "direction":  "any",
-        "mitre_id":   "T1071",
-        "mitre_name": "Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Anomalous mean inter-packet time deviates from expected "
-            "human interaction patterns."
-        ),
-    },
-    "std_Time_difference_between_packets_per_session": {
-        "direction":  "negative",
-        "mitre_id":   "T1071",
-        "mitre_name": "Application Layer Protocol",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "Low inter-packet time variance suggests rigid, automated timing "
-            "rather than the variable pacing of interactive sessions."
-        ),
-    },
-    "max_Time_difference_between_packets_per_session": {
-        "direction":  "positive",
-        "mitre_id":   "T1071.001",
-        "mitre_name": "Web Protocols",
-        "tactic":     "Command and Control",
-        "annotation": (
-            "High maximum inter-packet gap may reflect a C2 polling interval "
-            "or keepalive timeout characteristic of persistent encrypted tunnels."
-        ),
+        "citation": None,  # Phase 4
     },
 }
 
-# ── Mapping metadata ──────────────────────────────────────────────────────────
-# Version stamp persisted with every alert (alerts.mapping_version) so results
-# can be attributed to the mapping table that produced them after rule changes.
-MAPPING_VERSION = "fmm-1.1.0"
+_DIR_WORD = {"high": "elevated", "low": "low"}
 
-# Keyword fallback for top-k features that have no explicit rule (or whose
-# contribution direction did not match). Produces mapping_status =
-# "unmapped_heuristic": the orchestrator drops these at the TheHive gate in
-# strict mode but can triage them when REQUIRE_STRICT_MAPPED=false.
+
+# ── Fallbacks for malicious flows with no validated-feature evidence ──────────
+# Keyword heuristic → mapping_status "unmapped_heuristic"; the orchestrator drops
+# these at the TheHive gate in strict mode but can triage them otherwise.
 KEYWORD_TTP_RULES = [
-    ("interval_of_arrival", "T1071", "Application Layer Protocol"),
-    ("time_difference",     "T1071", "Application Layer Protocol"),
-    ("time_to_live",        "T1071", "Application Layer Protocol"),
-    ("windows_size",        "T1095", "Non-Application Layer Protocol"),
-    ("payload",             "T1573", "Encrypted Channel"),
-    ("length_of_ip",        "T1041", "Exfiltration Over C2 Channel"),
+    ("interval_of_arrival", "exfil",        "T1041", "Exfiltration Over C2 Channel"),
+    ("time_difference",     "exfil",        "T1041", "Exfiltration Over C2 Channel"),
+    ("payload",             "c2_beaconing", "T1573", "Encrypted Channel"),
+    ("windows_size",        "c2_beaconing", "T1071", "Application Layer Protocol"),
+    ("length_of_ip",        "c2_beaconing", "T1071", "Application Layer Protocol"),
 ]
-
-# Last-resort TTP for malicious flows where neither explicit rules nor the
-# keyword heuristic matched (mapping_status = "unmapped").
-FALLBACK_TTP = ("T1595", "Active Scanning")
+FALLBACK_TTP = ("T1071", "Application Layer Protocol")   # last-resort C2 for unmapped malicious
 
 
-# ── Severity scoring ──────────────────────────────────────────────────────────
+# ── Severity (advisory) ───────────────────────────────────────────────────────
+# NOTE: the SOAR orchestrator is the authoritative source of severity (it
+# recomputes from pred_proba per SOAR_WORKFLOW_SPEC §Step 2). This label is
+# advisory context for the dashboard only.
 def compute_severity(pred_proba: float, n_matched_features: int) -> int:
-    """
-    Returns severity 1 (low) / 2 (medium) / 3 (high).
-    Combines model confidence with number of security-relevant features.
-    """
-    base = pred_proba  # 0.0–1.0
-
-    # Boost if multiple security-relevant features agree
-    feature_boost = min(n_matched_features * 0.03, 0.15)
-
-    score = base + feature_boost
+    """Returns severity 1 (low) / 2 (medium) / 3 (high)."""
+    score = pred_proba + min(n_matched_features * 0.03, 0.15)
     if score >= 0.85:
-        return 3    # HIGH
+        return 3
     elif score >= 0.65:
-        return 2    # MEDIUM
-    else:
-        return 1    # LOW
+        return 2
+    return 1
 
 
 SEVERITY_LABEL = {1: "LOW", 2: "MEDIUM", 3: "HIGH"}
 
 
-# ── Translation function ──────────────────────────────────────────────────────
+# ── Translation ───────────────────────────────────────────────────────────────
 def translate(alert: dict) -> dict:
     """
-    Takes one alert record from the inference service and returns an
-    enriched alert ready for persistence and dashboard display.
-
-    Parameters
-    ----------
-    alert : dict
-        Output of explain_instance() with sent_ts and inferred_ts added.
-
-    Returns
-    -------
-    dict : enriched alert with MITRE mappings, severity, and annotation.
+    Enrich one inference alert: infer the behavioural class from XAI top-k
+    features, assign its MITRE TTPs, and attach mapping provenance/confidence.
+    Output keys are the contract consumed by translator_service.py + the SOAR
+    orchestrator (mitre_ttps, severity, mapping_status/confidence/version/reason).
     """
-    top_k     = alert.get("top_k_json", [])
+    top_k      = alert.get("top_k_json", [])
     pred_proba = float(alert.get("pred_proba", 0.0))
     pred_label = int(alert.get("pred_label", 0) or 0)
 
-    matched_ttps  = []
-    matched_names = []
-    annotations   = []
-    matched_features = []
-
+    # ── Aggregate malicious-pushing top-k features into per-class votes ──────
+    votes = {}                       # class -> weighted vote
+    evidence = {}                    # class -> [(feature, confidence, |contrib|)]
     for entry in top_k:
         feature   = entry.get("feature", "")
         direction = entry.get("direction", "positive")
+        contrib   = abs(float(entry.get("contribution", 0.0) or 0.0))
 
-        if feature not in FEATURE_MITRE_MAP:
+        rule = FEATURE_CLASS_MAP.get(feature)
+        if rule is None or direction != "positive":   # only validated, malicious-pushing evidence
             continue
+        cls    = rule["class"]
+        weight = rule["confidence"] * (contrib if contrib > 0 else 1.0)
+        votes[cls] = votes.get(cls, 0.0) + weight
+        evidence.setdefault(cls, []).append((feature, rule["confidence"], contrib, rule["direction"]))
 
-        mapping = FEATURE_MITRE_MAP[feature]
+    matched_ttps, matched_names, annotations = [], [], []
 
-        # Check direction relevance
-        map_dir = mapping["direction"]
-        if map_dir != "any" and map_dir != direction:
-            continue
+    if votes:
+        # ── Dominant validated class, gated by the ambiguity margin ─────────
+        inferred_class = max(votes, key=votes.get)
+        total_vote = sum(votes.values())
+        dominance  = (votes[inferred_class] / total_vote) if total_vote else 1.0
 
-        mitre_id = mapping["mitre_id"]
-        if mitre_id not in matched_ttps:
-            matched_ttps.append(mitre_id)
-            matched_names.append(mapping["mitre_name"])
+        info = CLASS_TTP_MAP[inferred_class]
+        matched_ttps  = [t["mitre_id"]   for t in info["ttps"]]
+        matched_names = [t["mitre_name"] for t in info["ttps"]]
 
-        matched_features.append(f"{feature}→{mitre_id}")
-        annotations.append(
-            f"[{feature}] {mapping['annotation']}"
-        )
+        ev = evidence[inferred_class]
+        den = sum(w for _, _, w, _ in ev)
+        base_conf = (sum(conf * w for _, conf, w, _ in ev) / den) if den > 0 \
+            else (sum(conf for _, conf, _, _ in ev) / len(ev))
+        feats = ", ".join(f for f, _, _, _ in ev)
+        annotations = [info["summary"]] + [
+            f"[{f}] {_DIR_WORD.get(d, d)} value (reliability {conf:.2f})"
+            for f, conf, _, d in ev
+        ]
 
-    # Severity reflects explicit rule matches only — heuristic/fallback TTPs
-    # added below are provenance-tagged context, not corroborating evidence.
-    n_explicit     = len(matched_ttps)
-    severity_int   = compute_severity(pred_proba, n_explicit)
-    severity_label = SEVERITY_LABEL[severity_int]
-
-    # ── Mapping provenance metadata (consumed by the SOAR orchestrator) ──────
-    if n_explicit >= 1:
-        mapping_status = "mapped"
-        # Fraction of top-k evidence covered by explicit rules.
-        mapping_confidence = round(len(annotations) / max(len(top_k), 1), 2)
-        mapping_reason = (
-            f"{len(annotations)}/{len(top_k)} top-k features matched explicit "
-            f"rules: {'; '.join(matched_features)}"
-        )
-    elif pred_label == 1:
-        heuristic_hits = []
-        for entry in top_k:
-            feature_lc = str(entry.get("feature", "")).lower()
-            for keyword, ttp, name in KEYWORD_TTP_RULES:
-                if keyword in feature_lc:
-                    heuristic_hits.append(f"{entry.get('feature')}~{keyword}→{ttp}")
-                    if ttp not in matched_ttps:
-                        matched_ttps.append(ttp)
-                        matched_names.append(name)
-                    break
-        if heuristic_hits:
-            mapping_status = "unmapped_heuristic"
-            mapping_confidence = 0.30
+        if dominance >= CLASS_MARGIN:
+            mapping_status     = "mapped"
+            mapping_confidence = round(base_conf, 3)
             mapping_reason = (
-                "No explicit rule matched; keyword heuristic assigned: "
-                + "; ".join(heuristic_hits)
+                f"class={inferred_class} (dominance {dominance:.2f}) from "
+                f"{len(ev)} validated feature(s) [{feats}]; conf={mapping_confidence}"
             )
         else:
-            mapping_status = "unmapped"
-            mapping_confidence = 0.0
-            matched_ttps.append(FALLBACK_TTP[0])
-            matched_names.append(FALLBACK_TTP[1])
+            # Evidence split between classes — assert the winner only tentatively.
+            runner = sorted(votes.items(), key=lambda kv: -kv[1])[1][0]
+            mapping_status     = "unmapped_heuristic"
+            mapping_confidence = round(base_conf * dominance, 3)
             mapping_reason = (
-                "No explicit or heuristic rule matched top-k features; "
-                f"fallback {FALLBACK_TTP[0]} assigned for observability"
+                f"ambiguous: {inferred_class} vs {runner} (dominance {dominance:.2f} "
+                f"< margin {CLASS_MARGIN}); tentative {inferred_class}"
             )
-    else:
-        mapping_status = "unmapped"
-        mapping_confidence = 0.0
-        mapping_reason = "Benign flow — no explicit rules matched; no fallback assigned"
 
-    # Build human-readable annotation block
-    if alert.get("pred_label") == 1:
-        annotation_header = (
+    elif pred_label == 1:
+        # ── Heuristic / fallback for malicious flows with no validated evidence ──
+        hits = []
+        for entry in top_k:
+            fl = str(entry.get("feature", "")).lower()
+            for kw, cls, ttp, name in KEYWORD_TTP_RULES:
+                if kw in fl:
+                    hits.append(f"{entry.get('feature')}~{kw}→{ttp}")
+                    if ttp not in matched_ttps:
+                        matched_ttps.append(ttp); matched_names.append(name)
+                    break
+        if hits:
+            mapping_status, mapping_confidence = "unmapped_heuristic", 0.30
+            mapping_reason = "No validated feature matched; keyword heuristic: " + "; ".join(hits)
+            annotations = [f"Heuristic classification — {h}" for h in hits]
+        else:
+            mapping_status, mapping_confidence = "unmapped", 0.0
+            matched_ttps  = [FALLBACK_TTP[0]]
+            matched_names = [FALLBACK_TTP[1]]
+            mapping_reason = f"No validated/heuristic match; fallback {FALLBACK_TTP[0]} for observability"
+            annotations = ["No validated feature evidence; fallback TTP assigned."]
+    else:
+        mapping_status, mapping_confidence = "unmapped", 0.0
+        mapping_reason = "Benign flow — no TTP assignment"
+
+    severity_int   = compute_severity(pred_proba, len(matched_ttps) if mapping_status == "mapped" else 0)
+    severity_label = SEVERITY_LABEL[severity_int]
+
+    # ── Annotation block (dashboard) ────────────────────────────────────────
+    if pred_label == 1:
+        annotation = (
             f"MALICIOUS ENCRYPTED TRAFFIC DETECTED — "
             f"Confidence: {pred_proba:.1%} | Severity: {severity_label}\n\n"
             f"Model: {alert.get('model')} | Tier: {alert.get('tier')}\n"
-            f"MITRE ATT&CK: {', '.join(matched_ttps) if matched_ttps else 'Unclassified'}\n\n"
-            f"Evidence:\n" + "\n\n".join(f"• {a}" for a in annotations)
+            f"MITRE ATT&CK: {', '.join(matched_ttps) if matched_ttps else 'Unclassified'} "
+            f"(mapping: {mapping_status}, conf {mapping_confidence})\n\n"
+            f"Evidence:\n" + "\n".join(f"• {a}" for a in annotations)
         )
     else:
-        annotation_header = (
-            f"Benign flow — Confidence: {1 - pred_proba:.1%} | "
-            f"Model: {alert.get('model')}"
+        annotation = (
+            f"Benign flow — Confidence: {1 - pred_proba:.1%} | Model: {alert.get('model')}"
         )
 
     return {
         **alert,
-        "mitre_ttps":      matched_ttps,
-        "mitre_names":     matched_names,
-        "severity":        severity_int,
-        "severity_label":  severity_label,
-        "annotation":      annotation_header,
-        # Counts the final TTP list (incl. heuristic/fallback) — the
-        # orchestrator's n_ttps_matched >= 1 gate must pass for heuristic
-        # alerts when strict mapping is relaxed; provenance lives in
-        # mapping_status, not in this count.
-        "n_ttps_matched":  len(matched_ttps),
+        "mitre_ttps":         matched_ttps,
+        "mitre_names":        matched_names,
+        "severity":           severity_int,
+        "severity_label":     severity_label,
+        "annotation":         annotation,
+        "n_ttps_matched":     len(matched_ttps),
         "mapping_status":     mapping_status,
         "mapping_confidence": mapping_confidence,
         "mapping_version":    MAPPING_VERSION,

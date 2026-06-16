@@ -4,6 +4,13 @@
 machine and the SOAR machine). Read this first to understand the whole system and the
 contract between the two halves.
 
+> **Standalone, cross-machine doc.** The two halves live in **separate git repositories** 
+> on separate machines; they are NOT synced via git. This file is the shared bridge — keep
+> an identical copy in each repo's `context/`, and when the contract (the `alerts` schema,
+> the SOAR workflow, or the responsibility split) changes, copy the updated file to the
+> other repo. Each repo's own `context.md` is *that machine's* local detail and differs
+> between the two; this overview is the only doc that describes both halves.
+
 **Thesis:** "Explainable Machine Learning for Malicious Encrypted Traffic Detection and
 Trust-Aware SOAR Integration" — Joel C. Okore (MSc, Innopolis). The SOAR module is
 co-developed with **Isaac Womoakor**.
@@ -49,7 +56,8 @@ Either is valid; the DB path is what's implemented.
 
 ## 2. Half A — Detection pipeline (this machine, Joel)
 
-Full detail in `context/context.md`. Summary of current state (2026-06):
+Full detail lives in the **detection repo's** `context/context.md` (not present on the SOAR
+machine). Summary of current state (2026-06):
 
 - **Models retrained on NFStream features** — `models/mapper` (RF `rf_best`, XGBoost
   `xgb_rt`, EBM `xxgb`, scalers, `REALTIME_SAFE_FEATURES` (29), `BEST_FEATURES` (9)).
@@ -62,12 +70,17 @@ Full detail in `context/context.md`. Summary of current state (2026-06):
 - **Dataset** — 11.8k balanced flows from ~25 real Windows-malware families (2022–2025,
   malware-traffic-analysis.net) + benign; per-flow IOC-labelled. Built by
   `utils/build_training_dataset.py` (+ `utils/fetch_mta_pcaps.py`).
-- **Feature→MITRE mapping validation (IN PROGRESS — the thesis headline):**
-  `model_training/feature_mitre_validation.ipynb`. Triangulates SHAP (deployed binary +
-  auxiliary 3-class) + statistics + (pending) EBM/LIME + literature. Validated signatures:
-  **C2 = HIGH payload/IP-packet length; Exfil = LOW inter-arrival timing.** This rebuild
-  targets a `feature → class → TTP` structure with a per-mapping confidence (feeds the
-  `mapping_*` columns).
+- **Feature→MITRE mapping validation (DONE — the thesis headline):**
+  `model_training/feature_mitre_validation.ipynb`. Signatures validated by **four methods**
+  (statistics + SHAP-binary + SHAP-3class + EBM exact) with **90–100% bootstrap stability**:
+  **C2 = HIGH payload/IP-packet length; Exfil = LOW inter-arrival timing.** The map is rebuilt
+  as `feature → class → TTP` and **live in `services/translator/feature_mitre_map.py`
+  (`fmm-2.0.0`)**, emitting real `mapping_confidence` (calibrated 0–1, = bootstrap stability)
+  and `mapping_status` (`mapped`/`unmapped_heuristic`/`unmapped`), with a tunable
+  ambiguity-margin gate (`MAPPING_CLASS_MARGIN`, default 0.60). End-to-end validation:
+  **87.5% TTP-assignment accuracy** vs true labels (C2 F1 0.93 / ~0.99 confidence; exfil
+  lower — a documented limitation: minority class + signature overlap). Phase 4 literature
+  grounding for each link is the only remaining piece (`citation` placeholders).
 
 Key files: `services/nfstream/nfstream_producer.py`, `services/inference/inference_service.py`
 (+`explain_instance.py`), `services/translator/translator_service.py`
@@ -112,10 +125,10 @@ context / isolate path), Dashboard (notify/approve/feedback). Key files:
    `server_fingerprint` (JA3S). The producer should emit them and the translator's
    `extract_observables()` should add an observable `{type: "ja3", value, role}` so Cortex/MISP
    can correlate (MISP `ja3-fingerprint-md5`). *Currently only ip/domain/url are extracted.*
-2. **`mapping_*` columns ← mapping-validation output.** The in-progress feature→class→TTP
-   validation produces a per-mapping confidence + status — wire these into `translate()` so
-   `mapping_confidence` / `mapping_status` (`mapped`/`unmapped_heuristic`/`unmapped`) /
-   `mapping_version` are populated, not the current placeholders.
+2. **`mapping_*` columns ← mapping-validation output. [DONE]** `translate()` (`fmm-2.0.0`)
+   now emits real `mapping_confidence` (calibrated 0–1), `mapping_status`
+   (`mapped`/`unmapped_heuristic`/`unmapped`), `mapping_version`, and `mapping_reason`. The
+   SOAR trust gate can rely on these as live values. C2/T1071 ≈ 0.99; exfil/T1041 lower.
 3. **Severity ownership.** Translator `compute_severity()` (≥0.85 HIGH) and SOAR spec Step 2
    (`pred_proba` ≥0.90 High / 0.70–0.89 Med / <0.70 review) use different thresholds.
    Decide: orchestrator re-derives from `pred_proba` (spec) and treats `severity_label` as
