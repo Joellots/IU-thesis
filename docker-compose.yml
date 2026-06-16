@@ -155,6 +155,8 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: soar
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./services/dashboard/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
