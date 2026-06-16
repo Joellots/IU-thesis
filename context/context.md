@@ -2,7 +2,9 @@
 
 **Author:** Joel C. Okore, MSc Computer Science, Innopolis University
 **Supervisor:** Dr Andrei Petrovski
-**Last updated:** 2026-06-10 (reflects state after the extensive NFStream evaluation)
+**Last updated:** 2026-06-14. **For the whole-project picture (both the detection pipeline
+and the SOAR module) and the cross-half integration contract, see
+[`context/SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md).** This file is the detection-side detail.
 
 Thesis: **"Explainable Machine Learning for Malicious Encrypted Traffic Detection and Trust-Aware SOAR Integration."**
 Two deliverables: (1) a conference paper (USBEREIT 2026, accepted with minor corrections); (2) a proof-of-concept SOAR pipeline — a Docker Compose stack that operationalises the paper's models.

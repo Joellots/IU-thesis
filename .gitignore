@@ -10,3 +10,6 @@ pcaps/*
 !pcaps/mta/
 pcaps/mta/*
 !pcaps/mta/ioc_manifest.json
+
+# Generated directory snapshot (regenerated per machine)
+tree.txt
