@@ -31,6 +31,83 @@ def ensure_bookkeeping_table(cur) -> None:
     )
 
 
+def ensure_shuffle_results_table(cur) -> None:
+    """Append-only log of Shuffle's POSTs to /soar/shuffle-result (the §7.1
+    callback_url). Kept separate from soar_orchestrator_bookkeeping so a
+    retried/duplicate callback never clobbers the original dispatch record.
+    """
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS soar_shuffle_results (
+            id SERIAL PRIMARY KEY,
+            flow_id TEXT NOT NULL,
+            thehive_case_id TEXT,
+            results JSONB,
+            received_ts TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """
+    )
+
+
+def ensure_feedback_table(cur) -> None:
+    """Interim store for SOAR_WORKFLOW_SPEC.md Step 6 (analyst feedback).
+
+    Column names deliberately match the shared `alerts` columns the
+    detection side has agreed to add (explanation_useful, flag_for_retraining,
+    a true_positive/false_positive verdict) so this table's rows can move
+    onto the shared schema with a straight column copy once that migration
+    lands — Step 6 will then be owned by the dashboard, not this endpoint.
+    """
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS soar_analyst_feedback (
+            id SERIAL PRIMARY KEY,
+            alert_id INTEGER,
+            flow_id TEXT NOT NULL,
+            true_positive BOOLEAN,       -- NULL = undecided, true = TP, false = FP
+            explanation_useful BOOLEAN,
+            flag_for_retraining BOOLEAN,
+            note TEXT,
+            decided_ts TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """
+    )
+
+
+def record_shuffle_result(conn, *, flow_id: str, thehive_case_id: str, results: Any) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO soar_shuffle_results (flow_id, thehive_case_id, results)
+            VALUES (%s, %s, %s)
+            """,
+            (flow_id, thehive_case_id, psycopg2.extras.Json(results)),
+        )
+    conn.commit()
+
+
+def record_feedback(
+    conn,
+    *,
+    flow_id: str,
+    alert_id: Any,
+    true_positive: Any,
+    explanation_useful: Any,
+    flag_for_retraining: Any,
+    note: Any,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO soar_analyst_feedback
+              (alert_id, flow_id, true_positive, explanation_useful, flag_for_retraining, note)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (alert_id, flow_id, true_positive, explanation_useful, flag_for_retraining, note),
+        )
+    conn.commit()
+
+
 def pick_next_alert(conn, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Returns alert rows that have not been processed by the orchestrator yet.

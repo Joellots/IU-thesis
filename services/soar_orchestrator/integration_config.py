@@ -77,6 +77,13 @@ TIER1_HASH_ANALYZERS = [
     "MISP_2_1",
 ]
 
+# JA3/JA3S TLS-fingerprint correlation (SYSTEM_OVERVIEW.md §5.1) is MISP-only —
+# no Tier-0 (no-key) analyzer does fingerprint lookups, so there is no
+# TIER0_JA3_ANALYZERS list.
+TIER1_JA3_ANALYZERS = [
+    "MISP_2_1",
+]
+
 # Tier-1 analyzers and the env var / Cortex configuration key they need.
 # Used by scripts/setup_soar_integrations.py to inject the key during activation.
 # URLhaus moved to Tier-1 in 2023 when abuse.ch added free API authentication
@@ -110,6 +117,7 @@ DEFAULT_IP_ANALYZERS = TIER0_IP_ANALYZERS + TIER1_IP_ANALYZERS
 DEFAULT_DOMAIN_ANALYZERS = TIER0_DOMAIN_ANALYZERS + TIER1_DOMAIN_ANALYZERS
 DEFAULT_URL_ANALYZERS = TIER0_URL_ANALYZERS + TIER1_URL_ANALYZERS
 DEFAULT_HASH_ANALYZERS = TIER0_HASH_ANALYZERS + TIER1_HASH_ANALYZERS
+DEFAULT_JA3_ANALYZERS = list(TIER1_JA3_ANALYZERS)
 
 # Responders commonly used for case automation (enable in Cortex org via setup script).
 # Kept intentionally small + non-destructive for the thesis demo.
@@ -191,6 +199,7 @@ def get_configured_analyzers() -> Dict[str, List[str]]:
         "domain": analyzers_from_env("CORTEX_DOMAIN_ANALYZERS", DEFAULT_DOMAIN_ANALYZERS),
         "url": analyzers_from_env("CORTEX_URL_ANALYZERS", DEFAULT_URL_ANALYZERS),
         "hash": analyzers_from_env("CORTEX_HASH_ANALYZERS", DEFAULT_HASH_ANALYZERS),
+        "ja3": analyzers_from_env("CORTEX_JA3_ANALYZERS", DEFAULT_JA3_ANALYZERS),
     }
 
 

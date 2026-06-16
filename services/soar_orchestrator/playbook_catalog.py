@@ -21,7 +21,8 @@ def build_playbook_plan(
     *,
     mitre_ttps: List[str],
     mitre_names: Optional[List[str]],
-    severity_label: Optional[str],
+    severity: Optional[str],
+    severity_label: Optional[str] = None,
     pred_proba: float,
     top_k_json: List[Dict[str, Any]],
     n_ttps_matched: int,
@@ -34,6 +35,10 @@ def build_playbook_plan(
     Returns an ordered list of steps (the "dynamic playbook").
     Technique-specific steps are built from the cached MITRE ATT&CK Enterprise
     STIX bundle (official names, descriptions, mitigations).
+
+    `severity` is the orchestrator's authoritative recompute from `pred_proba`
+    (severity.py); `severity_label` is the translator's advisory label, kept
+    only for traceability in the evidence summary.
     """
     unique_techniques: List[str] = []
     for t in mitre_ttps or []:
@@ -45,7 +50,8 @@ def build_playbook_plan(
     steps: List[Dict[str, Any]] = []
 
     evidence_summary: Dict[str, Any] = {
-        "severity_label": severity_label,
+        "severity": severity,
+        "severity_advisory": severity_label,
         "pred_proba": round(pred_proba, 6),
         "n_ttps_matched": n_ttps_matched,
         "top_k_sample": top_k_json[: min(5, len(top_k_json))],
@@ -84,13 +90,13 @@ def build_playbook_plan(
             )
         )
 
-    if force_active_response or (severity_label == "HIGH" and pred_proba >= active_response_min_proba):
+    if force_active_response or (severity == "High" and pred_proba >= active_response_min_proba):
         steps.append(
             _step(
                 "Execute Response Actions (High Confidence)",
                 "Execute active response actions appropriate for the selected techniques. "
                 "Examples: block/contain suspected destinations, start network hunts, and escalate to incident management. "
-                f"(Gated: force_active_response={force_active_response} OR severity=HIGH and pred_proba>={active_response_min_proba:.2f})",
+                f"(Gated: force_active_response={force_active_response} OR severity=High and pred_proba>={active_response_min_proba:.2f})",
                 group="Response",
             )
         )
@@ -99,7 +105,7 @@ def build_playbook_plan(
             _step(
                 "Execute Investigation-Only Actions",
                 "Run containment-adjacent investigations (enrichment + pivoting) without aggressive blocking. "
-                f"(Gated: severity={severity_label or 'UNKNOWN'} and pred_proba={pred_proba:.2f})",
+                f"(Gated: severity={severity or 'UNKNOWN'} and pred_proba={pred_proba:.2f})",
                 group="Response",
             )
         )

@@ -81,7 +81,7 @@ services:
       KAFKA_BROKER: kafka:9092
       TOPIC: raw_flows
       STREAM_DELAY_MS: 500          # milliseconds between messages (tune freely)
-      DATASET_PATH: /data/dataset.csv
+      DATASET_PATH: /data/training_dataset.csv
       LOOP: "true"                  # replay dataset continuously when done
     volumes:
       - ./data:/data:ro             # mount dataset read-only

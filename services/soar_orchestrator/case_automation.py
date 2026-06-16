@@ -85,25 +85,22 @@ def _summarize_cortex_job(job: Dict[str, Any]) -> Tuple[str, str]:
     return (verdict, tax_str[:200])
 
 
-def _post_cortex_summary_task(
-    *,
-    case_id: str,
+def _collect_cortex_verdicts(
     launched_jobs: List[Dict[str, Any]],
+    *,
     per_job_wait_seconds: int,
     total_budget_seconds: int,
-) -> Optional[str]:
-    """Poll each Cortex job briefly, build a markdown verdict table, and post
-    it back to the case as a Completed task so analysts see the recap inline.
+) -> List[Dict[str, Any]]:
+    """Poll each Cortex job once, bounded by `total_budget_seconds`. Any job
+    still pending when the budget runs out is recorded as 'pending' — its
+    full report remains available natively on the observable's Analysis tab.
 
-    Latency is bounded by `total_budget_seconds`; any job that's still pending
-    when we run out of budget is shown as 'pending' and the full report stays
-    available natively on the observable's Analysis tab.
+    This is the single poll pass shared by the summary task (markdown
+    recap) and the intel-verdict aggregation (`derive_intel_verdict`) so a
+    job is never polled twice for the same alert.
     """
     start = time.monotonic()
-    rows = [
-        "| Observable | Type | Analyzer | Verdict | Taxonomies |",
-        "|---|---|---|---|---|",
-    ]
+    verdicts: List[Dict[str, Any]] = []
     for lj in launched_jobs:
         remaining = total_budget_seconds - (time.monotonic() - start)
         if remaining <= 0:
@@ -117,10 +114,94 @@ def _post_cortex_summary_task(
             except Exception as exc:
                 job = {"error": str(exc)}
             verdict, tax = _summarize_cortex_job(job)
-        obs_value = (lj.get("observable_value") or "")[:60]
+        verdicts.append(
+            {
+                "analyzer_name": lj.get("analyzer_name", "?"),
+                "observable_value": lj.get("observable_value", ""),
+                "observable_type": lj.get("observable_type", "?"),
+                "verdict": verdict,
+                "taxonomies": tax,
+            }
+        )
+    return verdicts
+
+
+def _intel_confirmation_analyzers() -> set:
+    """Analyzers trusted to "confirm" an IOC for the §5 auto-block cell.
+
+    Deliberately a narrow, named allowlist (not "any analyzer says
+    malicious") — these are dedicated threat-intel/reputation sources, not
+    heuristics, so a single positive from one of them is a defensible bar
+    for "Malicious IOC confirmed". Override via env if Cortex is configured
+    with different analyzer names.
+    """
+    raw = os.getenv(
+        "INTEL_CONFIRMATION_ANALYZERS",
+        "MISP_2_1,VirusTotal_GetReport_3_1,URLhaus_2_0",
+    )
+    return {s.strip() for s in raw.split(",") if s.strip()}
+
+
+def derive_intel_verdict(verdicts: List[Dict[str, Any]]) -> Tuple[bool, float]:
+    """Combine per-job Cortex verdicts into the Step 4 intel signal.
+
+    intel_malicious: True only when a designated intel-grade analyzer (see
+    `_intel_confirmation_analyzers`) reports an explicit 'malicious'
+    taxonomy verdict. This is what the §5 decision matrix's single
+    High+confirmed-IOC auto-block cell keys off — kept conservative on
+    purpose.
+
+    intel_score: the fraction of resolved verdicts (excluding
+    pending/missing/error) that came back malicious, from ALL launched
+    analyzers — a softer signal for case context; it does not by itself
+    drive the auto-block gate.
+    """
+    confirmation_analyzers = _intel_confirmation_analyzers()
+    resolved = [v for v in verdicts if v.get("verdict") not in ("missing", "pending", "error", "")]
+    malicious = [v for v in resolved if v.get("verdict") == "malicious"]
+    intel_malicious = any(v.get("analyzer_name") in confirmation_analyzers for v in malicious)
+    intel_score = (len(malicious) / len(resolved)) if resolved else 0.0
+    return intel_malicious, round(intel_score, 4)
+
+
+def annotate_observable_intel(
+    observables: List[Dict[str, Any]], verdicts: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Tag each observable with a per-observable `intel_malicious` flag —
+    True only when a designated confirmation analyzer (see
+    `_intel_confirmation_analyzers`) returned a `malicious` verdict for that
+    exact (type, value) pair. This is what decision_matrix.decide_actions
+    uses to pick auto-block targets, and what the §7.1 payload's
+    `observables[].intel_malicious` field reports.
+    """
+    confirmation_analyzers = _intel_confirmation_analyzers()
+    malicious_keys = {
+        (v.get("observable_type"), v.get("observable_value"))
+        for v in verdicts
+        if v.get("verdict") == "malicious" and v.get("analyzer_name") in confirmation_analyzers
+    }
+    annotated = []
+    for obs in observables:
+        obs = dict(obs)
+        if (obs.get("type"), obs.get("value")) in malicious_keys:
+            obs["intel_malicious"] = True
+        annotated.append(obs)
+    return annotated
+
+
+def _post_cortex_summary_task(*, case_id: str, verdicts: List[Dict[str, Any]]) -> Optional[str]:
+    """Build a markdown verdict table from already-polled verdicts and post
+    it back to the case as a Completed task so analysts see the recap inline.
+    """
+    rows = [
+        "| Observable | Type | Analyzer | Verdict | Taxonomies |",
+        "|---|---|---|---|---|",
+    ]
+    for v in verdicts:
+        obs_value = (v.get("observable_value") or "")[:60]
         rows.append(
-            f"| `{obs_value}` | {lj.get('observable_type','?')} | "
-            f"{lj.get('analyzer_name','?')} | {verdict} | {tax} |"
+            f"| `{obs_value}` | {v.get('observable_type','?')} | "
+            f"{v.get('analyzer_name','?')} | {v.get('verdict','?')} | {v.get('taxonomies','')} |"
         )
     description = (
         "Automated Cortex enrichment results. Full per-job reports are attached "
@@ -159,7 +240,6 @@ def run_case_automation(
     mitre_ttps: List[str],
     observables: List[Dict[str, Any]],
     cortex: CortexClient,
-    pick_observable_types,
     analyzers_for_observable_type,
 ) -> Dict[str, Any]:
     """
@@ -171,6 +251,9 @@ def run_case_automation(
         "responder_runs": [],
         "cortex_results": [],
         "completed_task_ids": [],
+        "intel_malicious": False,
+        "intel_score": 0.0,
+        "enriched_observables": list(observables),
     }
 
     if _env_bool("ORCHESTRATOR_DRY_RUN", "true"):
@@ -202,6 +285,9 @@ def run_case_automation(
             if not obs_value or not obs_type:
                 continue
             data_type = to_thehive_observable_type(obs)
+            # ja3 has no standard TheHive dataType — to_thehive_observable_type()
+            # falls back to "other", so tag it to keep it findable/filterable.
+            extra_tags = ["ja3"] if str(obs_type).lower() == "ja3" else None
             try:
                 result = create_case_observable(
                     case_id=str(case_id),
@@ -211,6 +297,7 @@ def run_case_automation(
                     pap=2,
                     ioc=ioc_flag,
                     sighted=False,
+                    tags=extra_tags,
                 )
             except Exception as exc:
                 summary["case_observable_results"].append(
@@ -260,15 +347,15 @@ def run_case_automation(
     # taxonomies in the case's Observables -> Analysis tab, natively).
     launched_jobs: List[Dict[str, Any]] = []
     if _env_bool("AUTO_RUN_CORTEX", "true") and observable_index:
-        allowed_types = pick_observable_types(mitre_ttps)
+        # Route every observable by its own type (spec Step 3) — no MITRE-TTP
+        # based filtering. analyzers_for_observable_type() already returns []
+        # for any type with no configured analyzer, which is gate enough.
         run_count = 0
         max_cortex = _env_int("MAX_CORTEX_RUNS_PER_FLOW", 20)
         max_obs = _env_int("MAX_OBSERVABLES_PER_FLOW", 10)
         for entry in observable_index[:max_obs]:
             if run_count >= max_cortex:
                 break
-            if entry["type"] not in allowed_types:
-                continue
             analyzers = analyzers_for_observable_type(entry["type"])
             if not analyzers:
                 continue
@@ -330,13 +417,18 @@ def run_case_automation(
                 if run_count >= max_cortex:
                     break
 
-    if launched_jobs and _env_bool("POST_CORTEX_SUMMARY_TASK", "true"):
-        summary["cortex_summary_task_id"] = _post_cortex_summary_task(
-            case_id=str(case_id),
-            launched_jobs=launched_jobs,
+    if launched_jobs:
+        verdicts = _collect_cortex_verdicts(
+            launched_jobs,
             per_job_wait_seconds=_env_int("CORTEX_SUMMARY_PER_JOB_WAIT_SEC", 2),
             total_budget_seconds=_env_int("CORTEX_SUMMARY_TOTAL_BUDGET_SEC", 20),
         )
+        summary["intel_malicious"], summary["intel_score"] = derive_intel_verdict(verdicts)
+        summary["enriched_observables"] = annotate_observable_intel(observables, verdicts)
+        if _env_bool("POST_CORTEX_SUMMARY_TASK", "true"):
+            summary["cortex_summary_task_id"] = _post_cortex_summary_task(
+                case_id=str(case_id), verdicts=verdicts
+            )
 
     if _env_bool("AUTO_COMPLETE_CASE_TASKS", "true"):
         task_ids = [str(t["id"]) for t in list_case_tasks(case_id) if t.get("id")]

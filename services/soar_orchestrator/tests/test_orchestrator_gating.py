@@ -12,6 +12,7 @@ from orchestrator import should_create_thehive_case  # noqa: E402
 def _alert(**kwargs):
     base = {
         "pred_label": 1,
+        "pred_proba": 0.95,  # comfortably High — keeps these tests focused on the mapping gate
         "mapping_status": "mapped",
         "n_ttps_matched": 2,
     }
@@ -80,3 +81,31 @@ def test_mapped_without_ttps_skipped(monkeypatch):
     ok, reason = should_create_thehive_case(_alert(n_ttps_matched=0))
     assert ok is False
     assert "No MITRE" in reason
+
+
+def test_low_severity_skipped_regardless_of_mapping(monkeypatch):
+    """Step 2: pred_proba < 0.70 is analyst-review-only — no case, no
+    matter how confidently it's mapped."""
+    monkeypatch.setenv("REQUIRE_MAPPED_FOR_THEHIVE", "true")
+    ok, reason = should_create_thehive_case(_alert(pred_proba=0.5))
+    assert ok is False
+    assert "Severity=Low" in reason
+
+
+def test_medium_and_high_severity_pass_the_severity_gate(monkeypatch):
+    monkeypatch.setenv("REQUIRE_MAPPED_FOR_THEHIVE", "true")
+    monkeypatch.setenv("THEHIVE_API_KEY", "test-key")
+    ok, reason = should_create_thehive_case(_alert(pred_proba=0.75))
+    assert ok is True
+    assert reason == ""
+    ok, reason = should_create_thehive_case(_alert(pred_proba=0.95))
+    assert ok is True
+    assert reason == ""
+
+
+def test_low_severity_skipped_even_without_require_mapped(monkeypatch):
+    monkeypatch.setenv("REQUIRE_MAPPED_FOR_THEHIVE", "false")
+    monkeypatch.setenv("THEHIVE_API_KEY", "test-key")
+    ok, reason = should_create_thehive_case(_alert(pred_proba=0.1))
+    assert ok is False
+    assert "Severity=Low" in reason

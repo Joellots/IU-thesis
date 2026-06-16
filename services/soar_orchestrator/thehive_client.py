@@ -26,8 +26,19 @@ def _thehive_base_url() -> str:
     return os.getenv("THEHIVE_BASE_URL", "http://thehive:9000").rstrip("/")
 
 
+def thehive_case_url(case_id: str) -> str:
+    """Browsable case URL for approval/notify context (§7.1 `case.thehive_case_url`).
+
+    THEHIVE_BASE_URL is usually the in-network API host (e.g.
+    `http://thehive:9000`), not what an analyst's browser can reach — set
+    THEHIVE_EXTERNAL_URL to the public UI origin when they differ.
+    """
+    base = os.getenv("THEHIVE_EXTERNAL_URL", "").rstrip("/") or _thehive_base_url()
+    return f"{base}/cases/{case_id}/details"
+
+
 def _orchestrator_dry_run() -> bool:
-    return os.getenv("ORCHESTRATOR_DRY_RUN", "1").lower() == "true"
+    return os.getenv("ORCHESTRATOR_DRY_RUN", "true").lower() == "true"
 
 
 def _normalize_secret(value: Optional[str]) -> str:
@@ -466,6 +477,11 @@ def to_thehive_observable_type(obs: Dict[str, Any]) -> str:
     if t == "hash":
         hash_type = str(obs.get("hashType") or "").lower()
         return hash_type or "hash"
+    if t == "ja3":
+        # No standard TheHive dataType for a JA3 fingerprint; land it as
+        # "other" (the caller tags it "ja3" so it stays findable/filterable)
+        # unless the org has configured a custom "ja3" observable type.
+        return os.getenv("THEHIVE_JA3_DATA_TYPE", "other")
     return t
 
 
