@@ -195,6 +195,7 @@ CONTEXT_FIELDS = [
     "bidirectional_duration_ms", "bidirectional_packets",
     "application_name", "application_category_name",
     "requested_server_name",
+    "client_fingerprint", "server_fingerprint",   # JA3 / JA3S → ja3 observables
 ]
 
 

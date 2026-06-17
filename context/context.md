@@ -74,7 +74,7 @@ hand-asserted map (low-IAT→C2; it's actually exfil's signature).
 - **End-to-end pipeline validation** — full stack on live/replayed traffic to the dashboard
   (latency, TTP-assignment rate, Tier-2 trigger rate).
 - **SOAR integration** (separate machine, Isaac+Joel) — orchestrator + Shuffle against the
-  shared `alerts` contract; see `SYSTEM_OVERVIEW.md` + `services/soar_orchestrator/SOAR_WORKFLOW_SPEC.md`.
+  shared `alerts` contract; see `SYSTEM_OVERVIEW.md` + `context/SOAR_WORKFLOW_SPEC.md`.
 
 ---
 
@@ -121,7 +121,8 @@ hand-asserted map (low-IAT→C2; it's actually exfil's signature).
 - `services/translator/translator_service.py` — consumes `alerts`, calls `translate()`, extracts `observables`, writes PostgreSQL `alerts` (incl. `mapping_*`).
 - `services/translator/feature_mitre_map.py` — **`fmm-2.0.0`**: `FEATURE_CLASS_MAP` + `CLASS_TTP_MAP` + `translate()` (class voting + margin gate) + `compute_severity()` (advisory).
 - `services/dashboard/main.py` + `schema.sql` — analyst UI + the shared `alerts` schema (the contract).
-- `services/soar_orchestrator/` — SOAR module (co-owned; see `SOAR_WORKFLOW_SPEC.md`).
+- (SOAR module — `soar_orchestrator` + TheHive/Cortex/MISP/Shuffle — runs on the SOAR
+  machine in the SOAR repo; not in this repo. Contract: `context/SOAR_WORKFLOW_SPEC.md`.)
 
 **Models & data**
 - `models/mapper` — retrained joblib dict (29 `REALTIME_SAFE_FEATURES`, 9 `BEST_FEATURES`).

@@ -419,7 +419,8 @@ def main():
                  + [c for c in MODEL_FEATURES if c in df.columns]
                  + [c for c in ["src_ip", "dst_ip", "src_port", "dst_port",
                                 "protocol", "bidirectional_packets",
-                                "requested_server_name"] if c in df.columns])
+                                "requested_server_name",
+                                "client_fingerprint", "server_fingerprint"] if c in df.columns])
     out_df = df[keep_cols]
     csv_path = out_dir / "training_dataset.csv"
     out_df.to_csv(csv_path, index=False)

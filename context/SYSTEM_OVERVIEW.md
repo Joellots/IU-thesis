@@ -88,9 +88,12 @@ Key files: `services/nfstream/nfstream_producer.py`, `services/inference/inferen
 
 ---
 
-## 3. Half B — SOAR module (`services/soar_orchestrator/`, Joel + Isaac)
+## 3. Half B — SOAR module (SOAR machine / SOAR repo, Joel + Isaac)
 
-Spec: `services/soar_orchestrator/SOAR_WORKFLOW_SPEC.md` (decision matrix is authoritative).
+The SOAR module (`soar_orchestrator` + the vendored stacks) lives in the **SOAR repo** and
+runs on the **SOAR machine** — it is not in the detection repo. Spec: `SOAR_WORKFLOW_SPEC.md`
+(decision matrix authoritative) — kept in `context/` on the detection repo and in
+`services/soar_orchestrator/` on the SOAR repo.
 Two layers: the **`soar_orchestrator`** Python service (alert parsing, severity, Cortex
 calls, TheHive cases, persistence) + **Shuffle workflows** (block/isolate/notify + the
 manual-approval pause gate).

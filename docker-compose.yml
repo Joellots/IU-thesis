@@ -217,34 +217,10 @@ services:
           memory: 768m
           cpus: "0.5"
 
-  
-  # ── 8. SOAR Orchestrator (TheHive case creation) ─────────────────────────
-  soar_orchestrator:
-    build: ./services/soar_orchestrator
-    container_name: soar_orchestrator
-    restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    # Secrets: load from `.env` next to this file (no ${VAR} interpolation — avoids blank-key warnings).
-    # Copy `.env.example` → `.env` and set THEHIVE_API_KEY, CORTEX_API_KEY (and any overrides).
-    # `required: false` so fresh clones / CI can run `compose config` / `up` without the file.
-    env_file:
-      - path: ./services/soar_orchestrator/.env
-        required: false
-    ports:
-      - "9100:9100"                         # Prometheus scrape target
-    volumes:
-      - attack_stix_cache:/app/cache
-    networks:
-      - net
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.5"
+  # NOTE: the SOAR orchestrator (TheHive/Cortex/Shuffle integration) runs on the
+  # SOAR machine, in the SOAR repo's compose — NOT here. The detection stack only
+  # produces the annotated `alerts` rows it consumes. To let the remote orchestrator
+  # read this Postgres, publish 5432 on the postgres service + firewall the SOAR host.
 
 networks:
   net:
@@ -252,4 +228,3 @@ networks:
 
 volumes:
   pgdata:
-  attack_stix_cache:

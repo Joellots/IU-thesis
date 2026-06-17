@@ -8,4 +8,4 @@
 > half — NFStream capture → inference → XAI → translator → the shared PostgreSQL `alerts` table.
 
 Key docs: `context/SYSTEM_OVERVIEW.md` (whole project), `context/context.md` (detection-side
-detail), `services/soar_orchestrator/SOAR_WORKFLOW_SPEC.md` (SOAR workflow + contract).
+detail), `context/SOAR_WORKFLOW_SPEC.md` (SOAR workflow + contract).

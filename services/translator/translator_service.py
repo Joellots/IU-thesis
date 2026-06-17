@@ -109,7 +109,7 @@ def extract_observables(alert: dict) -> list:
             if value is None or isinstance(value, (dict, list)):
                 continue
             text = str(value).strip()
-            if not text:
+            if not text or text.lower() in ("nan", "none", "null", "0.0", "0"):
                 continue
 
             if _IP_KEY_RE.search(key):
