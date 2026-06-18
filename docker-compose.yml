@@ -82,6 +82,7 @@ services:
       TOPIC: raw_flows
       STREAM_DELAY_MS: 500          # milliseconds between messages (tune freely)
       DATASET_PATH: /data/training_dataset.csv
+      LABEL_COL: "true_label"       # training_dataset.csv uses true_label (not label)
       LOOP: "true"                  # replay dataset continuously when done
     volumes:
       - ./data:/data:ro             # mount dataset read-only

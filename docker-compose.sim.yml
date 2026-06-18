@@ -1,12 +1,13 @@
 # Local detection-side simulation override (non-destructive).
 # Usage: docker compose -f docker-compose.yml -f docker-compose.sim.yml up …
-# Replays a finite batch from training_dataset.csv so the detection pipeline
-# produces annotated `alerts` rows (with ja3 observables, mapping_*, mitre_ttps).
-# The SOAR orchestrator that consumes them runs on the SOAR machine (not here).
+#   (or: ./detctl sim)
+# Replays a FINITE batch from training_dataset.csv (vs the base producer's
+# continuous LOOP=true) so the detection pipeline produces a bounded, observable
+# set of annotated `alerts` rows. The SOAR orchestrator that consumes them runs
+# on the SOAR machine, not here.
 services:
   producer:
     environment:
-      LABEL_COL: "true_label"      # training_dataset.csv uses true_label, not label
       BATCH_SIZE: "40"             # finite batch for an observable run
       LOOP: "false"
       STREAM_DELAY_MS: "300"
