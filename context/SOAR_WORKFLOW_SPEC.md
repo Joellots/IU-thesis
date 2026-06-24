@@ -10,10 +10,11 @@
 The SOAR module consumes annotated detection alerts and orchestrates enrichment, case
 management, and response actions. The orchestration logic is implemented in two layers:
 
-1. **`soar_orchestrator` service** (Python) — **polls** the shared PostgreSQL `alerts`
-   table (written by the detection/translator pipeline), applies severity logic, calls
-   Cortex/MISP, creates TheHive cases, runs the §5 decision matrix, persists state, and
-   hands the action directive to Shuffle.
+1. **`soar_orchestrator` service** (Python) — consumes the detection-side Kafka
+   `alert.translated` pointer event for low-latency triggers, fetches the full alert from
+   the shared PostgreSQL `alerts` table, applies severity logic, calls Cortex/MISP,
+   creates TheHive cases, runs the §5 decision matrix, persists state, and hands the
+   action directive to Shuffle. PostgreSQL polling remains enabled for fallback/replay.
 2. **Shuffle workflow** — visual automation for response actions (block, isolate, notify)
    and the manual approval gate.
 
@@ -22,17 +23,19 @@ authoritative — implement those rules exactly.
 
 ### Deployment topology (current)
 
-The two halves run on **separate machines** and integrate **only** through the shared
-Postgres `alerts` contract:
+The two halves run on **separate machines** and integrate through a durable Postgres
+contract plus a thin Kafka trigger:
 
 - **Detection machine** — runs the producer/inference/translator pipeline and **owns the
-  Postgres** (`alerts` table). Postgres publishes `5432`, firewalled to the SOAR host.
+  Postgres** (`alerts` table). Postgres publishes `5432`, firewalled to the SOAR host. The
+  translator writes the full row first, then publishes `alert.translated` to Kafka topic
+  `SOAR_ALERT_EVENTS_TOPIC` (default `soar_alert_events`).
 - **SOAR machine** — runs `soar_orchestrator` alongside the vendored TheHive/Cortex/MISP/
-  Shuffle stacks (`deploy/soar/`, managed by `scripts/soarctl.sh`). The orchestrator reads
-  the detection Postgres **cross-machine** (`DATABASE_URL → <DETECTION_HOST>:5432`) and
-  reaches the local SOAR stack over the host's published ports. It is **not** part of the
-  detection compose; start it with `scripts/soarctl.sh start orchestrator`. See
-  `deploy/soar/orchestrator/README.md`.
+  Shuffle stacks (`deploy/soar/`, managed by `scripts/soarctl.sh`). The orchestrator
+  consumes the Kafka pointer, reads the detection Postgres **cross-machine**
+  (`DATABASE_URL → <DETECTION_HOST>:5432`), and reaches the local SOAR stack over the host's
+  published ports. It is **not** part of the detection compose; start it with
+  `scripts/soarctl.sh start orchestrator`. See `deploy/soar/orchestrator/README.md`.
 
 ---
 
@@ -44,8 +47,8 @@ Postgres `alerts` contract:
 | **soar_orchestrator** | Parses alert, applies severity logic, calls Cortex, creates TheHive cases, persists state. |
 | **TheHive** | Case management — one case per qualifying alert, with tasks and observables. |
 | **Cortex + MISP** | Observable enrichment — IP/domain reputation, hash lookup, threat intel correlation. |
-| **Shuffle** | Response orchestration — block, isolate, notify, and the manual approval pause gate. **Block/isolate are currently safe no-op placeholders** (recorded, never enacted — no real firewall/EDR); see §7.2. |
-| **Wazuh** (optional) | Endpoint log analysis and additional context for hosts in flagged flow sessions. Alternative trigger source. **Currently dormant** — the "endpoint risk / isolate" path is therefore inactive. |
+| **Shuffle** | Now a **recorder/visualizer** of the actions directive (records + callback). Enforcement, notify, and the approval gate moved to the orchestrator; the Shuffle User-Input gate is **retired**. See §7.2. |
+| **Wazuh** (manager-only here) | **Live** — the on-demand Active-Response channel. Manager runs on the SOAR host (`deploy/soar/wazuh-manager`); the endpoint agent runs the vetted `soar-block`/`soar-isolate` scripts. Routes real block/isolate to the exact host that produced a flow. |
 | **Dashboard** | Analyst interface — notifications, manual approval responses, and feedback labelling (Step 6). Step 6 currently lands on the orchestrator's interim `/soar/feedback` endpoint pending the dashboard owning it. |
 | **PostgreSQL** | Persistent store — alerts, enrichment results, analyst decisions, retraining labels. **Owned by the detection machine**; the orchestrator reads/writes it cross-machine. |
 
@@ -53,16 +56,38 @@ Postgres `alerts` contract:
 
 ## 3. Trigger
 
-**Current implementation: the orchestrator polls the shared Postgres `alerts` table.**
-On an interval (`POLL_INTERVAL_SEC`) it calls `pick_next_alert(...)` for new rows where
-`model='XGBoost' AND tier='fast'`, marks each `running` in its own bookkeeping table
-(idempotent), and runs Steps 1–5 synchronously per alert. There is no inbound webhook to
-the orchestrator — the detection side only writes rows; the SOAR side pulls them.
+**Current implementation: Kafka-triggered, Postgres-backed.** The translator writes the
+full enriched alert row to PostgreSQL first, then publishes a thin Kafka pointer event to
+`SOAR_ALERT_EVENTS_TOPIC` (default `soar_alert_events`):
 
-(Design alternative, not used: a translator/Wazuh push webhook. A **Wazuh** rule match
-remains a possible future trigger source, but Wazuh is dormant today.)
+```json
+{
+  "schema_version": "1.0",
+  "event_type": "alert.translated",
+  "alert_id": 123,
+  "flow_id": "...",
+  "model": "XGBoost",
+  "tier": "fast",
+  "translated_ts": "2026-06-19T...",
+  "mapping_status": "mapped",
+  "pred_label": 1,
+  "pred_proba": 0.97
+}
+```
 
-The "trigger payload" is the annotated alert row itself (see Step 1 fields).
+The orchestrator validates `schema_version == "1.0"` and `event_type ==
+"alert.translated"`, then fetches the full row from Postgres by `alert_id`. Kafka is only
+the low-latency trigger; Postgres remains the audit/replay/state source of truth.
+
+**Fallback/replay:** the Postgres polling path remains active. On each loop the
+orchestrator still calls `pick_next_alert(...)` for rows not present in
+`soar_orchestrator_bookkeeping`, so missed Kafka events or historical rows can be replayed.
+Both Kafka and polling share one idempotency gate: `claim_alert_for_processing(...)` inserts
+one bookkeeping row per `alert_id`; duplicates are logged and skipped before TheHive or
+Shuffle are called.
+
+(Wazuh is **not** a trigger source here — the trigger is always the Postgres/Kafka alert.
+Wazuh is used downstream as the endpoint **enforcement** channel; see §9.)
 
 ---
 
@@ -81,7 +106,8 @@ detail in `context/SYSTEM_OVERVIEW.md`.
 - `observables` (JSONB) — `[{type, value, role}]`; `type ∈ {ip, domain, url, ja3}`,
   `role ∈ {src, dst}`. **`ja3`** carries the TLS client fingerprint (NFStream
   `client_fingerprint`); `server_fingerprint` (JA3S) may also appear. Route to Cortex/MISP
-  by `type` (see Step 3).
+  by `type` (see Step 3). The orchestrator normalizes and deduplicates observables before
+  enrichment/case creation, and by default skips non-global IPs (`SKIP_PRIVATE_IP_OBSERVABLES=true`).
 - `top_k_json` (JSONB) — `xai_top_features`: top-k `[{feature, value, contribution, direction}]`
 - `mitre_ttps`, `mitre_names` (JSONB) — mapped ATT&CK technique IDs / names
 - `mapping_confidence` (float), `mapping_status` (`mapped`/`unmapped_heuristic`/`unmapped`),
@@ -96,12 +122,19 @@ branch on it; recompute here so there is a single source of truth:
 
 | `pred_proba` (model_confidence) | Severity |
 |---|---|
-| `>= 0.90` | **High** |
-| `0.70 – 0.89` | **Medium** |
-| `< 0.70` | **Analyst review only** |
+| `>= SEVERITY_HIGH_THRESHOLD` | **High** |
+| `>= SEVERITY_MEDIUM_THRESHOLD` and `< High` | **Medium** |
+| `< SEVERITY_MEDIUM_THRESHOLD` | **Analyst review only (Low)** |
 
-> Note: the translator currently labels severity with a different threshold (≥0.85 = HIGH).
-> That mismatch is intentional/known — the orchestrator's thresholds above win.
+The bands are **env-configurable** (`SEVERITY_HIGH_THRESHOLD`, `SEVERITY_MEDIUM_THRESHOLD`).
+Spec default is High `≥0.90` / Medium `≥0.70`. **This deployment uses High `≥0.80`** because
+the retrained NFStream model rarely scores `≥0.90` — most true-malicious flows land 0.80–0.89,
+and the High cell is the only one that emits a (gated) block → without lowering it the approval
+loop would almost never fire. Bands: High `≥0.80`, Medium `0.70–0.79`, Low `<0.70`.
+
+> The detection-side translator's advisory `severity_label` is aligned to these same bands
+> (`pred_proba` only). It is advisory — the orchestrator recomputes and wins. If the band
+> changes here, re-align the translator so the dashboard label stays honest.
 
 ### Step 3 — Enrich Observables (Cortex + MISP)
 For High and Medium severity only. Iterate `observables` and route each to its analyzers
@@ -115,6 +148,16 @@ by `type` (analyzer lists are in `integration_config.py`):
 - MISP threat-intel correlation across all of the above
 
 Record the enrichment verdict: `intel_malicious` (bool) and `intel_score`.
+
+**Implementation note:** enrichment is now run directly against Cortex/MISP before
+TheHive case creation so the Step 5 decision and the initial case payload include
+intel verdicts. The pre-case wait is bounded (`CORTEX_PRE_CASE_WAIT_SEC`, falling back to
+`CORTEX_WAIT_SECONDS`; current default is short, so slow analyzers may still appear as
+`pending` in the initial case). After the case is created, the orchestrator attaches
+observables and posts a completed "Cortex Enrichment Summary" task with the verdict recap.
+The initial TheHive case description also includes markdown tables for alert summary,
+Cortex/MISP verdicts, SOAR actions, translator annotation/evidence, mapping reason, and top
+XAI evidence.
 
 **Analyst-review-only (Low) alerts skip enrichment** — they go straight to notification.
 
@@ -170,30 +213,36 @@ columns directly. Step 6's real home is the dashboard — the orchestrator route
 
 ---
 
-## 6. Manual Approval Gate (CRITICAL implementation note)
+## 6. Manual Approval Gate — dashboard-mediated (CRITICAL implementation note)
 
-Risky actions (**block**, **isolate**) must NOT fire automatically except in the single auto-block case defined in the matrix. All other block/isolate actions route through a **human approval pause**.
+Risky actions (**block**, **isolate**) must NOT fire automatically except in the single
+auto-block cell defined in the matrix. All other block/isolate actions route through a
+**human approval** step.
 
-In Shuffle this is implemented with a **User Input trigger node** that:
-1. Pauses the workflow.
-2. Sends an approval request (with alert context) to the configured channel.
-3. Waits for an `approve` / `reject` response.
-4. On `approve` → execute the block/isolate action.
-5. On `reject` → the action is **not** executed.
+**The gate is the dashboard approval loop (the Shuffle User-Input gate is retired).** When a
+gated action is decided on a **managed endpoint** (the alert carries a Wazuh `agent_id`), the
+orchestrator parks it in the shared Postgres table **`soar_pending_approvals`** (status
+`pending`, with a TTL). Then:
+1. The **dashboard** lists pending approvals (reads the table) with alert context + the
+   TheHive case link, the target host (`agent_id`/`host_id`), and—for block—the target IP.
+2. The analyst clicks **Approve** / **Reject**.
+3. The dashboard `POST`s the decision to the orchestrator: **`POST /soar/approve`**
+   (`{approval_id, decision, analyst, note}`, **token-gated** via `SOAR_APPROVAL_TOKEN`).
+4. On **approve** → the orchestrator runs the **real Wazuh Active-Response** on the agent
+   (`wazuh_response.block`/`isolate`) and marks the row `executed`/`failed`.
+5. On **reject** → the row is marked `rejected` (analyst + note); **no enforcement** (this is
+   the "reject → log, skip" the old Shuffle gate could not do).
 
-Do not generate a fully automated flow with no human gate for isolate actions.
+The claim is atomic (`pending → deciding`) so two concurrent approvals can't double-execute,
+and rows **auto-expire** after `APPROVAL_TTL_SEC` (cannot be executed once expired).
 
-**Implementation reality (verified against the live Shuffle):** the User Input node is
-**binary** — *approve* continues to the enforcement branch; *reject* (abort) **terminates
-the whole workflow run**, which is the safe default (no enforcement happens). Shuffle does
-**not** run a downstream "rejected" branch, so the rejection is **not** logged from inside
-the workflow. The rejection is instead captured by (a) the orchestrator's **pre-dispatch
-record** — the gated action is persisted with `requires_approval: true` in the alert's
-`playbook_plan` before hand-off — and (b) the **absence** of an "executed" outcome on the
-`callback_url`. A richer in-workflow "rejected → log" path would require a Shuffle User-Input
-*decline subflow* (a follow-up, not built). The §7.1 `reject → log, skip` contract therefore
-holds for **skip** (enforcement never fires); the **log** lives on the orchestrator side, not
-in Shuffle.
+> **Why the Shuffle User-Input gate was retired:** it was binary — *reject* aborted the whole
+> run (no in-workflow rejection log) — and it left gated Shuffle runs paused indefinitely once
+> approval moved to the dashboard. The dashboard loop fixes both. The Shuffle workflow now
+> just records the directive (visualization/audit) and never gates.
+
+Do not generate a fully automated flow with no human gate for isolate actions — isolate is
+**always** gated and only ever enforced via an approved `/soar/approve`.
 
 ---
 
@@ -271,38 +320,38 @@ recomputed from it.
 }
 ```
 
-### Shuffle execution rules (uniform — no matrix logic in Shuffle)
-- The workflow computes `approval_required = (block_present AND block_requires_approval) OR
-  (isolate_present AND isolate_requires_approval)`. Notify is never gated.
-  - `approval_required = false` → execute the directive directly.
-  - `approval_required = true` → **pause at the §6 User Input node**: **approve →** execute
-    the directive; **reject (abort) →** the run terminates, enforcement is skipped (see §6
-    for why there is no in-workflow "rejected" branch).
-- Action semantics: `block` → on `targets`; `isolate` → on `endpoint`/`target` (**always
-  arrives with `requires_approval: true`**); `notify` → Slack/dashboard message.
-- This keeps the gate a property of each action, so the matrix lives only in the
-  orchestrator. The single auto-block cell (High + confirmed IOC) is the only `block` that
-  arrives with `requires_approval: false`; `isolate` is never sent without approval.
-- After executing, POST a result summary (`{flow_id, thehive_case_id, results[]}`, each
-  result `executed` / `skipped`) to `callback_url`; the orchestrator persists it
-  (`soar_shuffle_results`).
-
-> **Implementation notes (current Shuffle workflow, ID in the orchestrator `.env`):** all
-> logic runs in **Shuffle Tools `execute_python`** nodes; the callback POST uses `urllib`
-> inside one of them because the `http` app worker is not deployed in this Shuffle swarm.
-> See §7.2 and `services/soar_orchestrator/shuffle/README.md`.
+### Shuffle's role now — record + callback (the gate is retired)
+Enforcement, notify, and the approval gate are all **orchestrator-owned** (see §7.2). Shuffle
+is now a **recorder/visualizer**: its `parse` node always routes to `execute_direct`, which
+records the directive and POSTs a result summary (`{flow_id, thehive_case_id, results[]}`) to
+`callback_url` (`/soar/shuffle-result` → `soar_shuffle_results`). It no longer gates — the
+old User-Input pause is unreachable. (All logic runs in **Shuffle Tools `execute_python`**
+nodes; the callback uses `urllib` because the `http` app worker is not deployed in the swarm.)
+The matrix still lives only in the orchestrator; `requires_approval` on each action is honoured
+by the orchestrator (auto vs dashboard-approval), not by Shuffle.
 
 ---
 
-## 7.2 Response actions are safe no-op placeholders (current state)
+## 7.2 Response actions — real enforcement via Wazuh (current state)
 
-`block` and `isolate` are **not** wired to a real firewall or EDR. The Shuffle workflow
-**records** each action (`outcome: executed`, `enforced: false`, `placeholder: true`) and
-reports it via the callback — it never enacts an enforcement change. This is deliberate for
-the thesis/lab: the full decision path, approval gate, case, enrichment, and callback all run
-for real, while the final enforcement is a no-op. `notify` is likewise a placeholder record
-(no live Slack webhook configured). Swapping in real enforcement is a later step and is
-isolated to those nodes — nothing upstream changes.
+`block`/`isolate` are enforced for real on the **endpoint** via **Wazuh on-demand
+Active-Response**, when the alert carries a managed-endpoint identity (`agent_id`):
+
+- **`notify`** → real Slack message (orchestrator `notify_client.py`, `SLACK_WEBHOOK_URL`) +
+  the dashboard surfaces (DB). Always runs, never gated.
+- **Auto-block** (High + confirmed IOC, `requires_approval: false`) → the orchestrator
+  immediately calls `wazuh_response.block(agent_id, dst_ip)` → manager `PUT /active-response`
+  → the agent's `soar-block` script drops egress to the malicious IP. (No agent ⇒ skipped.)
+- **Gated block / isolate** (`requires_approval: true`) → parked in `soar_pending_approvals`
+  for the §6 dashboard approval loop; on approve the orchestrator runs the real
+  `wazuh_response.block`/`isolate`. `isolate` preserves the agent↔manager channel.
+- **Replay / in-stack flows** (no `agent_id`) → no endpoint enforcement; notify + case only.
+
+The Shuffle node's recorded `{enforced:false, placeholder:true}` entries are **only a
+visualization/audit trail** now — the authoritative enforcement is the orchestrator→Wazuh
+path above. The endpoint agent + the four vetted AR scripts (`soar-block`/`unblock`/`isolate`/
+`unisolate`) are detection-repo-owned (`endpoint_agent/`); the manager + dispatcher are
+SOAR-side (`deploy/soar/wazuh-manager`, `services/soar_orchestrator/wazuh_response.py`).
 
 ---
 
@@ -311,14 +360,16 @@ isolated to those nodes — nothing upstream changes.
 ```mermaid
 flowchart TD
     Start([New ML Alert]) --> Trigger{Trigger Source}
-    Trigger -->|ML API webhook| Parse
-    Trigger -->|Wazuh alert| Parse
+    Trigger -->|Kafka alert.translated| Fetch[Fetch full alert row from Postgres]
+    Trigger -->|Postgres polling fallback/replay| Fetch
+    Trigger -->|Future Wazuh alert| Fetch
+    Fetch --> Parse
 
     Parse[["Step 1: Parse Alert Fields<br/>src IP, dst IP, domain,<br/>TLS fingerprint, confidence,<br/>XAI top features, MITRE TTPs"]]
     Parse --> Conf{"Step 2:<br/>Confidence Score?"}
 
-    Conf -->|">= 0.90"| High[High Severity]
-    Conf -->|"0.70 - 0.89"| Med[Medium Severity]
+    Conf -->|">= 0.80"| High[High Severity]
+    Conf -->|"0.70 - 0.79"| Med[Medium Severity]
     Conf -->|"< 0.70"| Low[Analyst Review Only]
 
     High --> Enrich
@@ -352,22 +403,35 @@ flowchart TD
     DB --> End([End])
 ```
 
-> Flowchart caveats vs. the implementation: the trigger is the orchestrator **polling**
-> Postgres (not a push webhook); the `Approval → Rejected → Feedback` edge is conceptual —
-> in Shuffle a reject **terminates the run** (no enforcement) rather than flowing onward
-> (§6); and Step 6 currently lands on the orchestrator's interim `/soar/feedback` route, not
-> yet the dashboard.
+> Flowchart caveats vs. the implementation: Kafka is only the low-latency trigger; the
+> orchestrator always fetches the full row from Postgres and polling remains a replay/fallback
+> path. The approval step is the **dashboard loop** (`soar_pending_approvals` +
+> `POST /soar/approve` → real Wazuh AR), not a Shuffle pause (§6, retired). Step 6 currently
+> lands on the orchestrator's interim `/soar/feedback` route, not yet the dashboard.
 
 ---
 
-## 9. Notes on Wazuh (optional component)
+## 9. Wazuh — the endpoint enforcement channel (LIVE, manager-only)
 
-Wazuh is an optional enhancement, not a core dependency. If integrated:
-- Acts as an alternative trigger source (Wazuh rule match → orchestrator).
-- Provides endpoint-level context for hosts appearing in flagged flow sessions.
-- Enables the "endpoint risk flagged" path in the decision matrix (isolate endpoint).
+Wazuh is now the **actuator** for endpoint-routed block/isolate, used **on demand** (not
+rule-driven). Deployment + flow:
+- **Manager-only** on the SOAR host (`deploy/soar/wazuh-manager`; no indexer/dashboard, to fit
+  memory). Registers the four AR `<command>`s. Ports: 1515 (enroll), 1516→1514 (agent comms),
+  55000 (API).
+- **Endpoint agent** (detection-repo `endpoint_agent/`) = NFStream sensor + Wazuh agent + the
+  vetted `soar-block`/`unblock`/`isolate`/`unisolate` scripts; enrolled to the manager.
+- **Endpoint identity** rides the contract: the sensor stamps `agent_id`/`host_id`/`host_ip`
+  onto the flow → `alerts` row → the §7.1 `endpoint` object. `endpoint_risk = bool(agent_id)`
+  now makes the (always-gated) isolate cell real.
+- **Dispatch**: orchestrator `wazuh_response.py` authenticates + `PUT /active-response?
+  agents_list=<agent_id>` `{"command":"soar-block0","arguments":["<dst_ip>"]}` (the AR name —
+  registered command + Wazuh's `0` timeout suffix; verified live). Auto-block
+  fires immediately; gated block/isolate fire on approval (§6). No `agent_id` ⇒ skipped
+  (replay/in-stack flows get notify + case only).
 
-If Wazuh is not deployed, the "isolate endpoint" action and the Wazuh trigger path are simply inactive — the rest of the workflow is unaffected. **Today Wazuh is dormant**, so the orchestrator emits `endpoint_risk=false` and the isolate cell never fires.
+Defense in depth is on the agent: the AR scripts validate the IP, refuse RFC1918/own-infra,
+log to `active-responses.log`, auto-expire blocks, and keep the manager channel alive on
+isolate.
 
 ---
 
@@ -375,18 +439,37 @@ If Wazuh is not deployed, the "isolate endpoint" action and the Wazuh trigger pa
 
 | Area | Design intent | Current state |
 |---|---|---|
-| **Trigger** | new-alert webhook | ✅ orchestrator **polls** Postgres `alerts` (`pick_next_alert`) |
+| **Trigger** | new-alert webhook / event | ✅ Kafka `alert.translated` trigger fetches full row from Postgres; polling remains fallback/replay (`pick_next_alert`) |
 | **Deployment** | one box | ✅ split: detection owns Postgres; SOAR runs orchestrator + stack, reads DB cross-machine (`scripts/soarctl.sh start orchestrator`) |
-| **Step 2 severity** | recompute from `pred_proba` (≥0.90 / 0.70–0.89 / <0.70) | ✅ `severity.py`; `severity_label` advisory only |
-| **Step 3 enrichment** | Cortex + MISP by observable type; `ja3` → MISP | ✅ analyzers enabled (Tier-0 + `MISP_2_1` + keyed Tier-1); `ja3` → MISP `ja3-fingerprint-md5` |
+| **Step 2 severity** | recompute from `pred_proba` (≥0.80 / 0.70–0.79 / <0.70, live bands) | ✅ `severity.py`; `severity_label` advisory only |
+| **Step 3 enrichment** | Cortex + MISP by observable type; `ja3` → MISP | ✅ runs before case creation with normalized/deduped observables and private-IP skipping; bounded wait can leave slow jobs `pending`; summary is posted into the case afterward |
 | **Step 4 mapping trust** | tentative TTP can't justify auto-block | ✅ `mapping_trust.py`; not an input to the auto-block cell |
 | **Step 5 matrix** | §5, authoritative | ✅ `decision_matrix.py` (auto-block only High + confirmed IOC; isolate always gated) |
-| **TheHive case** | one case per qualifying alert | ✅ created before hand-off; Low = notify-only, no case |
-| **Handoff to Shuffle** | push payload | ✅ Shuffle **`/api/v1/workflows/{id}/run`** API (not webhook) + flat action hints |
-| **Shuffle actions** | block / isolate / notify | ⚠️ **safe no-op placeholders** (recorded, never enacted); `notify` placeholder (no live Slack) |
-| **Approval gate** | pause; approve→exec, reject→log+skip | ⚠️ approve→exec ✅; reject **aborts the run** (skip ✅, log on orchestrator side, not in Shuffle) |
+| **TheHive case** | one case per qualifying alert | ✅ created after Step 3/4 enrichment and Step 5 decision; description uses markdown tables for summary/intel/actions/annotation/evidence; Low = notify-only, no case |
+| **Handoff to Shuffle** | push payload | ✅ Shuffle **`/api/v1/workflows/{id}/run`** API (not webhook) + flat action hints; Shuffle is now record-only |
+| **Notify** | Slack + dashboard | ✅ real Slack (`notify_client.py`, `SLACK_WEBHOOK_URL`), fail-soft; dashboard via DB |
+| **Block (endpoint)** | drop egress to C2 | ✅ **real Wazuh AR** — auto-block fires immediately on High+confirmed-IOC for a managed endpoint; no `agent_id` ⇒ skipped |
+| **Isolate (endpoint)** | always gated | ✅ emitted for managed endpoints; enforced via the approval loop (real `soar-isolate`, keeps manager channel) |
+| **Approval gate** | pause; approve→exec, reject→log+skip | ✅ **dashboard loop**: `soar_pending_approvals` + token-gated `POST /soar/approve` → real Wazuh AR on approve; logged reject; TTL expiry. Shuffle User-Input gate **retired** |
 | **Callback** | Shuffle → `/soar/shuffle-result` | ✅ `urllib` POST from `execute_python` (http app worker not deployed) → `soar_shuffle_results` |
 | **Step 6 feedback** | dashboard endpoint | ⚠️ interim `POST /soar/feedback` on the orchestrator → `soar_analyst_feedback` (migrate to shared columns when dashboard owns it) |
-| **Wazuh / isolate** | optional | ⛔ dormant; `endpoint_risk=false` |
+| **Wazuh manager** | enforcement channel | ✅ manager-only deployed (`deploy/soar/wazuh-manager`), AR commands registered, API reachable from orchestrator |
+| **Dashboard approval surface** | analyst approve/reject UI | ⏳ SOAR side ready (`soar_pending_approvals` + `/soar/approve`); the dashboard list/buttons are a detection-side build |
 
-Legend: ✅ implemented · ⚠️ implemented with a documented gap/placeholder · ⛔ inactive.
+Legend: ✅ implemented · ⚠️ implemented with a documented gap · ⏳ contract ready, other-side build pending.
+
+---
+
+## 11. Operational Helpers / Current Tunables
+
+- `scripts/delete_cortex_jobs.sh` deletes Cortex jobs via the Cortex API in repeated batches.
+  It skips API shape assumptions (`id`/`_id`) and reports failures; Cortex may still retain
+  `Deleted` history rows in the backend/UI.
+- `scripts/delete_thehive_cases.sh` deletes TheHive cases in batches; it is dry-run by
+  default and requires `--yes` to actually delete.
+- Job-volume controls live in `services/soar_orchestrator/.env`:
+  `MAX_OBSERVABLES_PER_FLOW`, `MAX_CORTEX_RUNS_PER_FLOW`, analyzer lists, and
+  `SKIP_PRIVATE_IP_OBSERVABLES`.
+- Initial case `pending` analyzer rows usually mean the bounded pre-case wait expired, not
+  that enrichment was skipped. Increase `CORTEX_PRE_CASE_WAIT_SEC` if the initial case must
+  wait longer for completed reports.

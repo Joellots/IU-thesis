@@ -7,7 +7,7 @@ feature engineering, the dataset construction, the models, the explainability la
 plus the design rationale and limitations. It is written to be fed to an LLM (Codex) as
 grounding context for **writing the thesis report**, and to onboard any engineer/agent to the
 detection codebase. It is the detection-side counterpart to
-[`context_soar/SOAR_FRAMEWORK_CONTEXT.md`](../context_soar/SOAR_FRAMEWORK_CONTEXT.md); together
+the SOAR repo's **`SOAR_FRAMEWORK_CONTEXT.md`** (it lives in the separate SOAR repository); together
 with [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) (the cross-half bridge) and
 [`SOAR_WORKFLOW_SPEC.md`](SOAR_WORKFLOW_SPEC.md) (the authoritative response contract), the four
 docs describe the whole framework.
@@ -505,8 +505,9 @@ Add prior-work citations to each `CLASS_TTP_MAP` link (the `citation` placeholde
   ∈ [0,1] = bootstrap top-k stability (`fmm-2.0.0`).
 - **`MAPPING_CLASS_MARGIN`** — ambiguity gate, default 0.60 (dominance threshold for `mapped`).
 - **`pred_proba` ≡ `model_confidence`** (the SOAR side's name; no rename).
-- **Severity** — translator advisory (≥0.85 HIGH); SOAR authoritative (High ≥0.90 / Med 0.70–0.89
-  / Low <0.70 from `pred_proba`).
+- **Severity** — ALIGNED bands (translator advisory matches the SOAR-authoritative orchestrator):
+  **High ≥0.80 / Medium 0.70–0.79 / Low <0.70** from `pred_proba` (env-tunable `SEVERITY_HIGH_MIN`
+  / `SEVERITY_MED_MIN`; lowered from ≥0.90 as the NFStream model rarely scores that high).
 - **Classes → TTPs** — `c2_beaconing` → T1071/T1071.001/T1573; `exfil` → T1041/T1048.002.
 - **`REALTIME_SAFE_FEATURES`** (29) / **`BEST_FEATURES`** (9) — the model's feature sets.
 - **Hosts** — detection `172.31.87.134` (Postgres :5432, Kafka :9094); SOAR `172.31.80.148`.
@@ -730,7 +731,8 @@ mapping-confidence distribution, and a WebSocket live feed).
 - **Labelling is IOC-completeness-dependent** (missing published IOCs → mislabelled benign).
 - **Single-deployment / single-era scope** — one lab topology; one malware era for in-domain.
 - **Phase-4 literature citations** for the mapping links are outstanding (empirical validation done).
-- **Severity semantics**: the translator's advisory `severity_label` (≥0.85 HIGH) and the SOAR
-  orchestrator's authoritative band (`pred_proba` ≥0.90 High / 0.70–0.89 Medium / <0.70 Low) differ,
-  so a ~0.80 flow shows "HIGH" in the dashboard yet is Medium (notify-only, no approval) to SOAR —
-  align the translator thresholds to the orchestrator to remove the ambiguity.
+- **Severity semantics (resolved):** the translator's advisory `severity_label` is now **aligned**
+  to the SOAR orchestrator's authoritative bands — both **High ≥0.80 / Medium 0.70–0.79 / Low
+  <0.70** (env-tunable, lowered from ≥0.90 because the NFStream model rarely scores ≥0.90; keep the
+  two sides matched). Only High flows produce a gated block → approval; Medium/High both get a
+  case + Cortex enrichment (if `mapped`); Low is notify-only.

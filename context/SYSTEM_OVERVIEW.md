@@ -48,9 +48,10 @@ integration point. Authoritative fields:
 | `mitre_ttps`, `mitre_names` | translator | mapped ATT&CK technique IDs/names |
 | `severity`, `severity_label` | translator | 1/2/3, LOW/MEDIUM/HIGH (advisory — see §5 adjustment) |
 | `annotation` | translator | human-readable SOC explanation |
-| `observables` | translator | `[{type: ip\|domain\|url, value, role: src\|dst}]` → Cortex/MISP routing |
+| `observables` | translator | `[{type: ip\|domain\|url\|ja3, value, role: src\|dst}]` → Cortex/MISP routing |
 | `mapping_confidence`/`_version`/`_status`/`_reason` | translator | reliability of the feature→TTP mapping (`mapped`/`unmapped_heuristic`/`unmapped`) |
-| `analyst_decision`/`_ts`/`_note` | dashboard | analyst feedback (Step 6) → retraining labels |
+| `agent_id`/`host_id`/`host_ip` (nullable) | sensor→translator | **endpoint identity** → SOAR routes block/isolate to the right Wazuh agent (§7.1 `endpoint`); NULL for replay/in-stack flows |
+| `analyst_decision`/`_ts`/`_note`, `explanation_useful`, `flag_for_retraining` | dashboard | analyst verdict + feedback (Step 6) → retraining labels |
 
 **Transport:** translator always writes the full enriched row to PostgreSQL first. After a
 successful insert commit, it publishes a small Kafka event (`event_type=alert.translated`)
@@ -131,32 +132,38 @@ context / isolate path), Dashboard (notify/approve/feedback). Key files:
 
 ---
 
-## 5. Integration adjustments / open sync items (2026-06)
+## 5. Integration status — RECONCILED (2026-06)
 
-1. **JA3/JA3S `tls_fingerprint` observable — NOW FEASIBLE.** The SOAR spec Step 1 wants
-   `tls_fingerprint`, and NFStream 6.6.0 **does** expose `client_fingerprint` (JA3) and
-   `server_fingerprint` (JA3S). The producer should emit them and the translator's
-   `extract_observables()` should add an observable `{type: "ja3", value, role}` so Cortex/MISP
-   can correlate (MISP `ja3-fingerprint-md5`). *Currently only ip/domain/url are extracted.*
-2. **`mapping_*` columns ← mapping-validation output. [DONE]** `translate()` (`fmm-2.0.0`)
-   now emits real `mapping_confidence` (calibrated 0–1), `mapping_status`
-   (`mapped`/`unmapped_heuristic`/`unmapped`), `mapping_version`, and `mapping_reason`. The
-   SOAR trust gate can rely on these as live values. C2/T1071 ≈ 0.99; exfil/T1041 lower.
-3. **Severity ownership.** Translator `compute_severity()` (≥0.85 HIGH) and SOAR spec Step 2
-   (`pred_proba` ≥0.90 High / 0.70–0.89 Med / <0.70 review) use different thresholds.
-   Decide: orchestrator re-derives from `pred_proba` (spec) and treats `severity_label` as
-   advisory, **or** align the translator thresholds to the spec. Recommend the orchestrator
-   is authoritative (single source) and the translator aligns its thresholds to match.
-4. **Confidence field name.** SOAR calls it `model_confidence`; the column is `pred_proba`.
-   The orchestrator should read `pred_proba` (no rename needed — just document it).
+The integration is **built and verified end-to-end** — an analyst-approved gated block drives a
+real nftables DROP on the target host. The former open sync items are now resolved:
+
+1. **JA3/JA3S observable — DONE.** The producer emits `client_fingerprint`/`server_fingerprint`;
+   the translator's `extract_observables()` adds `{type: "ja3", value, role}` so Cortex/MISP
+   correlate via MISP `ja3-fingerprint-md5`.
+2. **`mapping_*` columns — DONE.** `translate()` (`fmm-2.0.0`) emits live `mapping_confidence`
+   (calibrated 0–1 = bootstrap stability), `mapping_status`, `mapping_version`, `mapping_reason`;
+   the SOAR trust gate keys on them (C2/T1071 ≈ 0.99; exfil/T1041 lower).
+3. **Severity — ALIGNED.** The orchestrator is authoritative and derives severity from
+   `pred_proba`; the translator's advisory `severity_label` now uses the **same** bands. Live
+   deployment bands: **High ≥0.80, Medium 0.70–0.79, Low <0.70** (lowered from ≥0.90 because the
+   retrained NFStream model rarely scores ≥0.90 — most true-malicious flows land 0.80–0.89). Both
+   sides are env-tunable (`SEVERITY_HIGH_MIN`/`SEVERITY_MED_MIN` on the translator;
+   `SEVERITY_*_THRESHOLD` on the orchestrator) — **keep them matched.**
+4. **Endpoint identity — NEW contract field.** The endpoint sensor (or `detctl sim <agent_id>`)
+   stamps `agent_id`/`host_id`/`host_ip` (nullable) onto each flow → the `alerts` row → the §7.1
+   handoff `endpoint:{host_id, ip, source}`, so SOAR routes block/isolate to the right Wazuh agent.
+   The actuator is the shippable `endpoint_agent/` bundle (Wazuh agent + the four vetted
+   Active-Response scripts `soar-{block,unblock,isolate,unisolate}`).
+5. **`model_confidence` ≡ `pred_proba`** — documented equivalence, no rename.
 
 ---
 
 ## 6. Run / infra quick facts
 
 - Stack: `docker-compose.yml` (Kafka KRaft, producer/nfstream, inference, translator,
-  postgres, dashboard, kafka-ui). SOAR components (TheHive/Cortex/MISP/Shuffle) run
-  separately and consume the `soar_alert_events` Kafka trigger while reading full alert state
+  postgres, dashboard, dashboard-web, kafka-ui). SOAR components (TheHive/Cortex/MISP/Shuffle)
+  run separately and consume the `soar_alert_events` Kafka trigger while reading full alert state
   from the shared PostgreSQL `alerts` table.
-- Dashboard `:8080`, Kafka-UI `:8081`, Kafka external `:9094`.
+- Dashboard: **React SPA `:3000`** (the makeover) / htmx `:8080`, Kafka-UI `:8081`,
+  Kafka external `:9094`, Postgres `:5432`.
 - PostgreSQL db `soar` is shared across both halves — it is the integration substrate.

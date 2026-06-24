@@ -35,3 +35,7 @@ services/dashboard-web/dist/
 
 # Endpoint sensor runtime output (captured flows)
 endpoint_agent/sensor/output/
+
+# SOAR-side reference snapshot — canonical lives in the SOAR repo; kept local only,
+# never pushed from the detection repo. (context/ is the authoritative shared copy.)
+context_soar/

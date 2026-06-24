@@ -83,7 +83,8 @@ hand-asserted map (low-IAT→C2; it's actually exfil's signature).
 - **Phase 4 — literature grounding** for the mapping (`citation` placeholders in
   `CLASS_TTP_MAP`). The empirical validation is complete; this adds prior-work citations per link.
 - **Thesis write-up** (with Codex) — grounding docs: `DETECTION_FRAMEWORK_CONTEXT.md` +
-  `context_soar/SOAR_FRAMEWORK_CONTEXT.md` + `SYSTEM_OVERVIEW.md` + `SOAR_WORKFLOW_SPEC.md`.
+  `SYSTEM_OVERVIEW.md` + `SOAR_WORKFLOW_SPEC.md` (this repo) + the SOAR repo's
+  `SOAR_FRAMEWORK_CONTEXT.md` (separate repository).
 
 ---
 
