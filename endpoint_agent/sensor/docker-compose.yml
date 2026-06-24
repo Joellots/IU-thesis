@@ -1,0 +1,21 @@
+# Endpoint NFStream sensor — captures THIS host's live traffic and publishes
+# flows (stamped with the endpoint identity) to the detection pipeline's remote
+# Kafka `raw_flows` topic. host networking + NET_RAW/NET_ADMIN for live capture.
+services:
+  nfstream-sensor:
+    build: .
+    image: soar-endpoint-sensor:latest
+    container_name: soar_endpoint_sensor
+    network_mode: host          # capture host interfaces + reach the remote broker
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./output:/app/generated_flows
+    env_file: ../.env
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"

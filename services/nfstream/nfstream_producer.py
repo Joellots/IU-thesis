@@ -1,7 +1,7 @@
 """
 nfstream_producer.py
 ────────────────────
-NFStream feature extraction service for the XAI-SOAR pipeline.
+NFStream feature extraction service for the Aegis pipeline.
 
 Captures live traffic from a network interface (or replays a PCAP),
 computes per-flow features using statistical_analysis + ExtendedFlowFeatures
@@ -21,10 +21,12 @@ Environment variables:
 import os
 import json
 import time
+import uuid
 import logging
 import statistics
 import pandas as pd
 import psutil
+from datetime import datetime, timezone
 
 from nfstream import NFStreamer, NFPlugin
 from kafka import KafkaProducer
@@ -53,6 +55,31 @@ TOPIC          = os.getenv("TOPIC", "raw_flows")
 IDLE_TIMEOUT   = int(os.getenv("IDLE_TIMEOUT", "15"))
 ACTIVE_TIMEOUT = int(os.getenv("ACTIVE_TIMEOUT", "120"))
 
+# ── Endpoint identity (the SOAR response-routing contract) ────────────────────
+# When this sensor runs as a shippable endpoint agent, it stamps a stable
+# identity onto every flow it emits so the SOAR orchestrator can route a
+# block/isolate back to THIS host's Wazuh agent (§7.1 endpoint object).
+#   AGENT_ID  — the Wazuh agent id (read from /var/ossec/etc/client.keys by the
+#               installer); None for the in-stack sensor / before enrollment.
+#   HOST_ID   — the Wazuh agent name (= a predictable host id); defaults to the
+#               container/host hostname.
+#   HOST_IP   — this host's own IP; auto-detected from the default route if unset.
+def _default_host_ip():
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))   # no packet sent; just picks the egress IP
+            return s.getsockname()[0]
+        finally:
+            s.close()
+    except Exception:
+        return None
+
+AGENT_ID = os.getenv("AGENT_ID") or None
+HOST_ID  = os.getenv("HOST_ID")  or os.getenv("HOSTNAME") or os.uname().nodename or None
+HOST_IP  = os.getenv("HOST_IP")  or _default_host_ip()
+
 # BPF filter — encrypted traffic only
 BPF_FILTER = os.getenv(
     "BPF_FILTER",
@@ -63,9 +90,9 @@ BPF_FILTER = os.getenv(
 if not PCAP_FILE and not INTERFACE:
     raise RuntimeError("No network interface found and no PCAP_FILE provided.")
 
-# Use PCAP file if provided, otherwise live interface
-# SOURCE = PCAP_FILE if PCAP_FILE else INTERFACE
-SOURCE = PCAP_FILE if PCAP_FILE else "any"
+# Capture source: a PCAP file if given, else an explicitly configured interface
+# (INTERFACE env — used by the endpoint sensor), else "any" (default in-stack).
+SOURCE = PCAP_FILE if PCAP_FILE else (os.getenv("INTERFACE") or "any")
 
 
 
@@ -284,7 +311,7 @@ def make_producer(broker: str, retries: int = 10, delay: int = 5) -> KafkaProduc
 # Flow → dict conversion
 # ─────────────────────────────────────────────────────────────────────────────
 
-def flow_to_record(flow) -> dict:
+def flow_to_features(flow) -> dict:
     record = {}
 
     # Model features
@@ -299,14 +326,30 @@ def flow_to_record(flow) -> dict:
     for field in CONTEXT_FIELDS:
         record[field] = getattr(flow, field, None)
 
-    # Flow ID for tracing through the pipeline
-    record["flow_id"] = (
+    # Preserve the deterministic NFStream key inside the feature/context payload;
+    # the Kafka envelope uses a uuid4 flow_id to match services/producer.
+    record["nfstream_flow_id"] = (
         f"{flow.src_ip}:{flow.src_port}-{flow.dst_ip}:{flow.dst_port}"
         f"-{flow.protocol}-{flow.bidirectional_first_seen_ms}"
     )
-    record["sent_ts"] = int(time.time() * 1000)
 
     return record
+
+
+def build_payload(features: dict) -> dict:
+    payload = {
+        "flow_id":    str(uuid.uuid4()),
+        "sent_ts":    datetime.now(timezone.utc).isoformat(),
+        "true_label": -1,              # live endpoint flows are unlabelled
+        "features":   features,
+    }
+    # Endpoint identity → propagates through inference/translator to the
+    # alerts row (NULL-safe; in-stack/replay flows never set these).
+    payload["agent_id"] = AGENT_ID
+    payload["host_id"]  = HOST_ID
+    payload["host_ip"]  = HOST_IP
+
+    return payload
 
 
 def main():
@@ -315,6 +358,7 @@ def main():
     log.info(f"BPF filter  : {BPF_FILTER}")
     log.info(f"Kafka broker: {KAFKA_BROKER}  topic: {TOPIC}")
     log.info(f"Timeouts    : idle={IDLE_TIMEOUT}s  active={ACTIVE_TIMEOUT}s")
+    log.info(f"Endpoint    : agent_id={AGENT_ID}  host_id={HOST_ID}  host_ip={HOST_IP}")
 
     producer = make_producer(KAFKA_BROKER)
 
@@ -343,17 +387,28 @@ def main():
 
     for flow in streamer:
         try:
-            record = flow_to_record(flow)
-            producer.send(TOPIC, value=record)
+            features = flow_to_features(flow)
+            payload = build_payload(features)
+            producer.send(TOPIC, value=payload)
+
+            csv_record = {
+                "flow_id": payload["flow_id"],
+                "sent_ts": payload["sent_ts"],
+                "true_label": payload["true_label"],
+                "agent_id": payload["agent_id"],
+                "host_id": payload["host_id"],
+                "host_ip": payload["host_ip"],
+                **features,
+            }
 
             # Update DataFrame in real time
             if df.empty:
-                df = pd.DataFrame([record])
+                df = pd.DataFrame([csv_record])
             else:
-                df.loc[len(df)] = record
+                df.loc[len(df)] = csv_record
 
             # Append current flow to CSV immediately
-            pd.DataFrame([record]).to_csv(
+            pd.DataFrame([csv_record]).to_csv(
                 CSV_FILE,
                 mode="a",
                 header=not header_written,

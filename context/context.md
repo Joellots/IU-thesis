@@ -1,4 +1,4 @@
-# XAI-SOAR Thesis Project — Detection-side Context
+# Aegis Thesis Project — Detection-side Context
 
 **Author:** Joel C. Okore, MSc Computer Science, Innopolis University
 **Supervisor:** Dr Andrei Petrovski
@@ -17,8 +17,11 @@ models. The SOAR half is co-developed with **Isaac Womoakor** on a separate mach
 
 The classifier has been **retrained on NFStream features**, the dataset rebuilt, and the
 **feature→MITRE mapping validated and made live** — the thesis's three core technical results
-are done. Remaining detection-side work is small (JA3 observable wiring, Phase-4 literature
-grounding) plus the end-to-end demo and thesis writing.
+are done. The **operational PoC is now built and verified end-to-end**: JA3 observables wired,
+the **endpoint agent** (Wazuh Active-Response) + the **React dashboard makeover**, and the
+**closed SOAR response loop** (analyst approves a gated block → real nftables DROP on the host).
+The whole engine + agent is driven by **`scripts/detctl.sh`** (see `CHEATSHEET.md`). Remaining
+detection-side work is narrow: Phase-4 literature grounding + the thesis write-up.
 
 ---
 
@@ -63,18 +66,24 @@ hand-asserted map (low-IAT→C2; it's actually exfil's signature).
 
 ---
 
-## In Progress / Remaining (detection side)
+## Done since (operational PoC)
 
-- **JA3 observable wiring** — NFStream 6.6.0 exposes `client_fingerprint` (JA3) /
-  `server_fingerprint` (JA3S). Wire them into the producer + the translator's
-  `extract_observables()` as `{type: "ja3", …}` so Cortex/MISP can correlate. *Currently only
-  ip/domain/url are extracted.* (The SOAR side is already coded to route `ja3`.)
+- **JA3 observables** wired (producer + `extract_observables()` → `{type:"ja3"}`).
+- **Endpoint identity contract** (`agent_id`/`host_id`/`host_ip`, nullable) flows
+  producer→inference→translator→`alerts`; the producer can *replay-as-endpoint*
+  (`detctl sim <agent_id>`) so SOAR routes responses back to this host.
+- **Endpoint agent** (`endpoint_agent/`) — NFStream sensor + Wazuh agent + 4 vetted
+  Active-Response scripts (block/unblock/isolate/unisolate). Block path **verified live**
+  (dashboard approve → orchestrator → Wazuh API → agent → nft DROP).
+- **React dashboard** (`services/dashboard-web`, `:3000`) over the FastAPI JSON API, +
+  the **Analyst Approvals** + **Step-6 feedback** surfaces on both UIs.
+- **`detctl`** expanded to the full control surface; **`CHEATSHEET.md`** is the operator ref.
+
+## Remaining (detection side)
 - **Phase 4 — literature grounding** for the mapping (`citation` placeholders in
   `CLASS_TTP_MAP`). The empirical validation is complete; this adds prior-work citations per link.
-- **End-to-end pipeline validation** — full stack on live/replayed traffic to the dashboard
-  (latency, TTP-assignment rate, Tier-2 trigger rate).
-- **SOAR integration** (separate machine, Isaac+Joel) — orchestrator + Shuffle against the
-  shared `alerts` contract; see `SYSTEM_OVERVIEW.md` + `context/SOAR_WORKFLOW_SPEC.md`.
+- **Thesis write-up** (with Codex) — grounding docs: `DETECTION_FRAMEWORK_CONTEXT.md` +
+  `context_soar/SOAR_FRAMEWORK_CONTEXT.md` + `SYSTEM_OVERVIEW.md` + `SOAR_WORKFLOW_SPEC.md`.
 
 ---
 
@@ -118,7 +127,7 @@ hand-asserted map (low-IAT→C2; it's actually exfil's signature).
 - `docker-compose.yml` — 8-service stack (kafka, nfstream, producer, inference, translator, postgres, dashboard, kafka-ui).
 - `services/nfstream/nfstream_producer.py` — live/PCAP capture → `ExtendedFlowFeatures` plugin → `NFSTREAM_TO_MODEL` mapping → Kafka `raw_flows` + CSV. (TTL fix applied; std_ttl flagged.)
 - `services/inference/inference_service.py` (+ `explain_instance.py`) — loads `mapper`, runs two-tier XAI, publishes `alerts` with `top_k_json`.
-- `services/translator/translator_service.py` — consumes `alerts`, calls `translate()`, extracts `observables`, writes PostgreSQL `alerts` (incl. `mapping_*`).
+- `services/translator/translator_service.py` — consumes `alerts`, calls `translate()`, extracts `observables`, writes PostgreSQL `alerts` (incl. `mapping_*`), then publishes a thin `alert.translated` Kafka event to `SOAR_ALERT_EVENTS_TOPIC` (default `soar_alert_events`) after the insert commits.
 - `services/translator/feature_mitre_map.py` — **`fmm-2.0.0`**: `FEATURE_CLASS_MAP` + `CLASS_TTP_MAP` + `translate()` (class voting + margin gate) + `compute_severity()` (advisory).
 - `services/dashboard/main.py` + `schema.sql` — analyst UI + the shared `alerts` schema (the contract).
 - (SOAR module — `soar_orchestrator` + TheHive/Cortex/MISP/Shuffle — runs on the SOAR
@@ -179,14 +188,16 @@ python3 utils/fetch_mta_pcaps.py --out pcaps/mta/ --jobs 4
 | producer | `producer` | replays `data/dataset.csv` → `raw_flows` |
 | nfstream | `xai_nfstream` | live/PCAP capture → features → `raw_flows` (`network_mode: host`) |
 | inference | `inference` | mapper inference + XAI → `alerts` |
-| translator | `translator` | XAI→MITRE (`fmm-2.0.0`) + observables → PostgreSQL |
+| translator | `translator` | XAI→MITRE (`fmm-2.0.0`) + observables → PostgreSQL, then Kafka `alert.translated` trigger |
 | postgres | `postgres` | shared `alerts` store (the SOAR contract; not yet port-published for cross-machine) |
 | dashboard | `dashboard` | FastAPI + htmx analyst UI (`:8080`) |
 | kafka-ui | `kafka_ui` | dev Kafka inspector (`:8081`) |
 
-> Cross-machine note: the SOAR orchestrator (other machine) reads this PostgreSQL. To enable
-> that, publish `postgres` 5432 + firewall to the SOAR host, and point the orchestrator's
-> `DATABASE_URL` at this machine's IP.
+> Cross-machine note: the SOAR orchestrator (other machine) consumes Kafka
+> `soar_alert_events` as a low-latency trigger, then reads the full row from PostgreSQL.
+> Postgres remains the audit/replay source of truth, so the orchestrator can keep polling as
+> fallback/replay. To enable that, publish `postgres` 5432 + firewall to the SOAR host, expose
+> Kafka as needed, and point the orchestrator's `DATABASE_URL` at this machine's IP.
 
 ---
 

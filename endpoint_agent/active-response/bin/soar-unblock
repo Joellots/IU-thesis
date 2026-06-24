@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# soar-unblock — Wazuh Active-Response: remove a previously-added egress DROP.
+# Idempotent: removing a block that isn't present is a no-op success.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../lib/soar-ar-common.sh
+. "$SCRIPT_DIR/../lib/soar-ar-common.sh"
+
+ar_parse_stdin
+
+case "$AR_STATUS" in
+    parse_error|no_python) ar_log error  "stdin parse failed ($AR_STATUS)"; exit 1 ;;
+    invalid_ip)            ar_log invalid "invalid target IP '$AR_TARGET'";  exit 0 ;;
+esac
+
+[ -n "$AR_TARGET" ] || { ar_log error "no target IP in parameters.extra_args"; exit 1; }
+
+ar_block_del "$AR_TARGET"
+ar_log ok "unblocked $AR_TARGET backend=$(ar_backend)"
+exit 0

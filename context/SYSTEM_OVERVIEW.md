@@ -1,4 +1,4 @@
-# XAI-SOAR — Full System Overview (cross-machine context)
+# Aegis — Full System Overview (cross-machine context)
 
 **Audience:** Claude Code instances on *either* side of the project (the ML-detection
 machine and the SOAR machine). Read this first to understand the whole system and the
@@ -15,15 +15,19 @@ contract between the two halves.
 Trust-Aware SOAR Integration" — Joel C. Okore (MSc, Innopolis). The SOAR module is
 co-developed with **Isaac Womoakor**.
 
-The project has **two halves that meet at one contract (the PostgreSQL `alerts` table):**
+The project has **two halves that meet at one durable contract (the PostgreSQL
+`alerts` table) plus a thin Kafka trigger for low-latency SOAR handoff:**
 
 ```
   ┌─────────────────────── HALF A: Detection pipeline (Joel) ───────────────────────┐
   NFStream producer → Kafka(raw_flows) → Inference(+XAI) → Kafka(alerts) → Translator
                                                                                │
                                                           writes annotated alert ▼
-                                                    ┌──────── PostgreSQL `alerts` ────────┐   ← THE CONTRACT
-                                                                               │ reads
+                                                    ┌──────── PostgreSQL `alerts` ────────┐   ← AUDIT / REPLAY SOURCE OF TRUTH
+                                                                               │
+                                                          emits pointer event after commit ▼
+                                                    Kafka(`soar_alert_events`, alert.translated)
+                                                                               │ consume trigger, then fetch row
   ┌─────────────────────── HALF B: SOAR module (Joel + Isaac) ──────────────────────┐
   soar_orchestrator → severity → Cortex+MISP enrich → TheHive case → Shuffle actions
                                                     → Dashboard (notify / approve / feedback)
@@ -48,9 +52,15 @@ integration point. Authoritative fields:
 | `mapping_confidence`/`_version`/`_status`/`_reason` | translator | reliability of the feature→TTP mapping (`mapped`/`unmapped_heuristic`/`unmapped`) |
 | `analyst_decision`/`_ts`/`_note` | dashboard | analyst feedback (Step 6) → retraining labels |
 
-**Transport:** currently DB-based (translator writes, orchestrator reads). The SOAR spec
-also allows an **ML-API webhook** (translator POSTs the alert to the orchestrator/Shuffle).
-Either is valid; the DB path is what's implemented.
+**Transport:** translator always writes the full enriched row to PostgreSQL first. After a
+successful insert commit, it publishes a small Kafka event (`event_type=alert.translated`)
+to `SOAR_ALERT_EVENTS_TOPIC` (default `soar_alert_events`) containing only identifiers and
+routing metadata (`alert_id`, `flow_id`, model/tier, timestamps, mapping status, prediction).
+The SOAR consumer treats Kafka as a trigger and fetches the full row from PostgreSQL.
+Postgres remains the audit/replay source of truth, and Postgres polling can remain as a
+fallback or replay path. The SOAR spec also allows an **ML-API webhook**
+(translator POSTs the alert to the orchestrator/Shuffle), but the implemented path is now
+Postgres + Kafka trigger.
 
 ---
 
@@ -146,6 +156,7 @@ context / isolate path), Dashboard (notify/approve/feedback). Key files:
 
 - Stack: `docker-compose.yml` (Kafka KRaft, producer/nfstream, inference, translator,
   postgres, dashboard, kafka-ui). SOAR components (TheHive/Cortex/MISP/Shuffle) run
-  separately and reach the shared PostgreSQL + the orchestrator.
+  separately and consume the `soar_alert_events` Kafka trigger while reading full alert state
+  from the shared PostgreSQL `alerts` table.
 - Dashboard `:8080`, Kafka-UI `:8081`, Kafka external `:9094`.
 - PostgreSQL db `soar` is shared across both halves — it is the integration substrate.

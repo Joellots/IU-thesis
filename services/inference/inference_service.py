@@ -210,8 +210,21 @@ def main():
 
         flow_id    = payload.get("flow_id",    "unknown")
         sent_ts    = payload.get("sent_ts",    "")
-        true_label = int(payload.get("true_label", -1))
-        raw_feats  = payload.get("features",  {})
+        true_label = int(payload.get("true_label", -1) if payload.get("true_label") is not None else -1)
+
+        # The dataset-replay producer nests model features under "features"; the
+        # live NFStream sensor publishes a flat record (features at top level).
+        # Accept both so the same inference path serves replay and live endpoints.
+        raw_feats  = payload.get("features") or payload
+
+        # Endpoint identity (stamped by the live sensor; absent for replay flows).
+        # Forwarded onto every output record so the translator can persist it and
+        # the SOAR orchestrator can route a response to the right Wazuh agent.
+        endpoint_identity = {
+            "agent_id": payload.get("agent_id"),
+            "host_id":  payload.get("host_id"),
+            "host_ip":  payload.get("host_ip"),
+        }
 
         try:
             x_row = prepare_features(raw_feats, feat_cols, scaler)
@@ -298,6 +311,7 @@ def main():
             rec["sent_ts"]     = sent_ts
             rec["inferred_ts"] = inferred_ts
             rec["context"]     = context
+            rec.update(endpoint_identity)
             producer.send(OUTPUT_TOPIC, value=rec)
 
         processed += 1

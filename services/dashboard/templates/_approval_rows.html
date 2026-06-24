@@ -1,0 +1,8 @@
+{% if approvals %}
+  {% for a in approvals %}
+    {% include "_approval_card.html" %}
+  {% endfor %}
+{% else %}
+  <div class="empty">No pending approvals. Gated <b>block</b>/<b>isolate</b> actions awaiting an
+  analyst decision will appear here.</div>
+{% endif %}

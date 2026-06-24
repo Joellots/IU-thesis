@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# XAI-SOAR Pipeline — Python Requirements
+# Aegis Pipeline — Python Requirements
 # Covers: Jupyter notebook, producer, inference, translator, dashboard
 # ─────────────────────────────────────────────────────────────────────────────
 

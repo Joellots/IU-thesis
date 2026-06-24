@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 import psycopg2
 import psycopg2.extras
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import NoBrokersAvailable
 
 from feature_mitre_map import translate
@@ -27,6 +27,7 @@ from feature_mitre_map import translate
 # ── Config ────────────────────────────────────────────────────────────────────
 BROKER         = os.getenv("KAFKA_BROKER",    "kafka:9092")
 INPUT_TOPIC    = os.getenv("INPUT_TOPIC",     "alerts")
+SOAR_ALERT_EVENTS_TOPIC = os.getenv("SOAR_ALERT_EVENTS_TOPIC", "soar_alert_events")
 CONSUMER_GROUP = os.getenv("CONSUMER_GROUP",  "translator_group")
 DATABASE_URL   = os.getenv("DATABASE_URL",    "postgresql://user:pass@postgres:5432/soar")
 
@@ -61,6 +62,12 @@ ALERT_COLUMN_MIGRATIONS = {
     "mapping_version":    "TEXT",
     "mapping_status":     "TEXT",
     "mapping_reason":     "TEXT",
+    # Endpoint identity stamped by the endpoint sensor (nullable; NULL for
+    # dataset-replay flows). Lets the SOAR orchestrator route block/isolate to
+    # the right Wazuh agent (§7.1 endpoint object).
+    "agent_id":           "TEXT",
+    "host_id":            "TEXT",
+    "host_ip":            "TEXT",
 }
 
 
@@ -143,8 +150,25 @@ def extract_observables(alert: dict) -> list:
     return observables
 
 
+def build_soar_alert_event(record: dict, alert_id: int, translated_ts: str) -> dict:
+    """Build the thin Kafka pointer event consumed by SOAR."""
+    return {
+        "schema_version": "1.0",
+        "event_type": "alert.translated",
+        "alert_id": alert_id,
+        "flow_id": record.get("flow_id"),
+        "model": record.get("model"),
+        "tier": record.get("tier"),
+        "translated_ts": translated_ts,
+        "mapping_status": record.get("mapping_status", "unknown"),
+        "pred_label": record.get("pred_label"),
+        "pred_proba": record.get("pred_proba"),
+    }
+
+
 def insert_alert(cur, record: dict):
-    """Insert enriched alert into the alerts table."""
+    """Insert enriched alert into the alerts table and return (id, translated_ts)."""
+    translated_ts = datetime.now(timezone.utc).isoformat()
     cur.execute("""
         INSERT INTO alerts (
             flow_id, sent_ts, inferred_ts, translated_ts,
@@ -153,7 +177,8 @@ def insert_alert(cur, record: dict):
             mitre_ttps, mitre_names, severity, severity_label,
             annotation, n_ttps_matched,
             observables, mapping_confidence, mapping_version,
-            mapping_status, mapping_reason
+            mapping_status, mapping_reason,
+            agent_id, host_id, host_ip
         ) VALUES (
             %(flow_id)s, %(sent_ts)s, %(inferred_ts)s, %(translated_ts)s,
             %(model)s, %(tier)s, %(pred_label)s, %(pred_proba)s, %(true_label)s,
@@ -161,12 +186,14 @@ def insert_alert(cur, record: dict):
             %(mitre_ttps)s, %(mitre_names)s, %(severity)s, %(severity_label)s,
             %(annotation)s, %(n_ttps_matched)s,
             %(observables)s, %(mapping_confidence)s, %(mapping_version)s,
-            %(mapping_status)s, %(mapping_reason)s
+            %(mapping_status)s, %(mapping_reason)s,
+            %(agent_id)s, %(host_id)s, %(host_ip)s
         )
-        ON CONFLICT (flow_id, model) DO NOTHING;
+        ON CONFLICT (flow_id, model) DO NOTHING
+        RETURNING id;
     """, {
         **record,
-        "translated_ts": datetime.now(timezone.utc).isoformat(),
+        "translated_ts": translated_ts,
         "top_k_json":    json.dumps(record.get("top_k_json", [])),
         "mitre_ttps":    json.dumps(record.get("mitre_ttps", [])),
         "mitre_names":   json.dumps(record.get("mitre_names", [])),
@@ -175,7 +202,15 @@ def insert_alert(cur, record: dict):
         "mapping_version":    record.get("mapping_version", "unknown"),
         "mapping_status":     record.get("mapping_status", "unknown"),
         "mapping_reason":     record.get("mapping_reason", ""),
+        # Endpoint identity — NULL for replay flows that never set it.
+        "agent_id":           record.get("agent_id"),
+        "host_id":            record.get("host_id"),
+        "host_ip":            record.get("host_ip"),
     })
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return row[0], translated_ts
 
 
 def insert_raw_explanation(cur, record: dict):
@@ -216,48 +251,108 @@ def make_consumer(retries: int = 20, delay: int = 3) -> KafkaConsumer:
     raise RuntimeError("Could not connect translator consumer to Kafka")
 
 
+def make_producer(retries: int = 20, delay: int = 3) -> KafkaProducer:
+    for attempt in range(1, retries + 1):
+        try:
+            p = KafkaProducer(
+                bootstrap_servers=BROKER,
+                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+                acks="all",
+                retries=5,
+                linger_ms=10,
+            )
+            log.info("Translator producer connected — topic=%s", SOAR_ALERT_EVENTS_TOPIC)
+            return p
+        except NoBrokersAvailable:
+            log.warning("Broker not ready (%d/%d) — retrying in %ds",
+                        attempt, retries, delay)
+            time.sleep(delay)
+    raise RuntimeError("Could not connect translator producer to Kafka")
+
+
+def publish_soar_alert_event(producer: KafkaProducer, event: dict):
+    """Publish after Postgres commit; wait for broker ack for operator visibility."""
+    future = producer.send(SOAR_ALERT_EVENTS_TOPIC, value=event)
+    future.get(timeout=10)
+
+
+DB_LOST = (psycopg2.OperationalError, psycopg2.InterfaceError)
+
+
+def process_message(cur, producer, alert, processed):
+    """Process one Kafka alert. DB-connection errors (DB_LOST) propagate so the
+    caller can reconnect + retry; other errors are handled locally. Returns the
+    updated `processed` counter."""
+    # Raw explanation for every model/tier (swallow non-DB errors only).
+    try:
+        insert_raw_explanation(cur, alert)
+    except DB_LOST:
+        raise
+    except Exception as e:
+        log.warning("raw_explanations insert failed for %s: %s", alert.get("flow_id", "?"), e)
+
+    # Only translate + persist the primary XGBoost Tier-1 record.
+    if alert.get("model") != "XGBoost" or alert.get("tier") != "fast":
+        return processed
+
+    enriched = translate(alert)
+    enriched["observables"] = extract_observables(alert)
+    inserted = insert_alert(cur, enriched)          # DB_LOST propagates → reconnect
+    if inserted is None:
+        log.info("Alert already persisted for flow=%s model=%s — SOAR event skipped",
+                 enriched.get("flow_id", "?"), enriched.get("model", "?"))
+        return processed
+
+    alert_id, translated_ts = inserted
+    event = build_soar_alert_event(enriched, alert_id, translated_ts)
+    try:
+        publish_soar_alert_event(producer, event)
+    except Exception as e:
+        log.error("SOAR alert event publish failed for alert_id=%s flow=%s: %s",
+                  alert_id, enriched.get("flow_id", "?"), e)
+
+    processed += 1
+    label = "MALICIOUS" if enriched["pred_label"] == 1 else "benign"
+    log.info("[%d] alert_id=%s flow=%s  %s  severity=%s  ttps=%s",
+             processed, alert_id, enriched.get("flow_id", "?")[:8], label,
+             enriched.get("severity_label"), enriched.get("mitre_ttps"))
+    return processed
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     conn     = get_db()
     cur      = conn.cursor()
     ensure_alerts_schema(cur)
     consumer = make_consumer()
+    producer = make_producer()
 
-    log.info("Translator running — consuming from '%s'", INPUT_TOPIC)
+    log.info("Translator running — consuming from '%s', publishing SOAR events to '%s'",
+             INPUT_TOPIC, SOAR_ALERT_EVENTS_TOPIC)
     processed = 0
 
     for message in consumer:
         alert = message.value
-
-        # Always store raw explanation for every model/tier
-        try:
-            insert_raw_explanation(cur, alert)
-        except Exception as e:
-            log.warning("raw_explanations insert failed for %s: %s",
-                        alert.get("flow_id", "?"), e)
-
-        # Only translate and persist the primary XGBoost Tier-1 record
-        if alert.get("model") != "XGBoost" or alert.get("tier") != "fast":
-            continue
-
-        try:
-            enriched = translate(alert)
-            enriched["observables"] = extract_observables(alert)
-            insert_alert(cur, enriched)
-            processed += 1
-
-            label = "MALICIOUS" if enriched["pred_label"] == 1 else "benign"
-            log.info(
-                "[%d] flow=%s  %s  severity=%s  ttps=%s",
-                processed,
-                enriched.get("flow_id", "?")[:8],
-                label,
-                enriched.get("severity_label"),
-                enriched.get("mitre_ttps"),
-            )
-        except Exception as e:
-            log.error("Translation/insert failed for flow %s: %s",
-                      alert.get("flow_id", "?"), e)
+        # Process with ONE reconnect-and-retry on a lost DB connection. A
+        # cross-machine Postgres bounce leaves the cursor stale ("cursor already
+        # closed"); without this the translator would fail every insert until a
+        # manual restart. get_db() blocks/retries until Postgres is reachable.
+        for attempt in (1, 2):
+            try:
+                processed = process_message(cur, producer, alert, processed)
+                break
+            except DB_LOST as e:
+                log.warning("DB connection lost (%s) — reconnecting (attempt %d/2)…", e, attempt)
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = get_db()
+                cur  = conn.cursor()
+            except Exception as e:
+                log.error("Translation/insert failed for flow %s: %s",
+                          alert.get("flow_id", "?"), e)
+                break
 
 
 if __name__ == "__main__":

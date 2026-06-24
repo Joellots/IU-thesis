@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# soar-isolate — Wazuh Active-Response: drop ALL host traffic EXCEPT the
+# agent↔manager channel (so the host stays manageable and can be un-isolated)
+# and loopback. ALWAYS human-gated on the SOAR side. Reversible via soar-unisolate
+# (or a Wazuh stateful "delete").
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../lib/soar-ar-common.sh
+. "$SCRIPT_DIR/../lib/soar-ar-common.sh"
+
+ar_parse_stdin
+
+case "$AR_STATUS" in
+    parse_error|no_python) ar_log error "stdin parse failed ($AR_STATUS)";                exit 1 ;;
+    bad_command)           ar_log error "unexpected command '$AR_CMD' (need add/delete)"; exit 1 ;;
+esac
+
+if [ "$AR_CMD" = "delete" ]; then          # stateful timeout → restore
+    ar_isolate_off
+    ar_log ok "host UN-ISOLATED (stateful timeout)"
+    exit 0
+fi
+
+if ar_isolate_on; then
+    ar_log ok "host ISOLATED — only manager channel preserved ($MANAGER_HOST:$MANAGER_PORTS)"
+    exit 0
+fi
+ar_log error "isolate failed (rc=$?) — host left CONNECTED (fail-safe)"
+exit 1

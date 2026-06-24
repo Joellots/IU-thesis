@@ -8,7 +8,14 @@
 services:
   producer:
     environment:
-      BATCH_SIZE: "40"             # finite batch for an observable run
+      BATCH_SIZE: "20"             # finite batch for an observable run
       LOOP: "false"
       STREAM_DELAY_MS: "300"
-      MALICIOUS_RATIO: "0.5"       # mix of malicious (C2/exfil) + benign
+      MALICIOUS_RATIO: "0.7"       # mix of malicious (C2/exfil) + benign
+      # ── Replay-as-endpoint (this machine) ──────────────────────────────────
+      # Set SIM_AGENT_ID to THIS host's real Wazuh agent id (after installing the
+      # endpoint_agent bundle + enrolling) so SOAR routes block/isolate back here
+      # and you can verify the Active-Response locally. Leave unset → identity NULL.
+      SIM_AGENT_ID: "${SIM_AGENT_ID:-}"
+      SIM_HOST_ID:  "${SIM_HOST_ID:-detection-host}"
+      SIM_HOST_IP:  "${SIM_HOST_IP:-172.31.87.134}"

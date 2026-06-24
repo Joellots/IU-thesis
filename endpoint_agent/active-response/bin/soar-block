@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# soar-block — Wazuh Active-Response: add a host-local egress DROP to a public IP.
+# Triggered on-demand by the SOAR orchestrator (PUT /active-response). The block
+# is reversible and auto-expires after SOAR_BLOCK_TTL. On a Wazuh stateful
+# "delete" (timeout) this same script removes the block.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../lib/soar-ar-common.sh
+. "$SCRIPT_DIR/../lib/soar-ar-common.sh"
+
+ar_parse_stdin
+
+case "$AR_STATUS" in
+    parse_error|no_python) ar_log error  "stdin parse failed ($AR_STATUS)";                exit 1 ;;
+    bad_command)           ar_log error  "unexpected command '$AR_CMD' (need add/delete)"; exit 1 ;;
+    invalid_ip)            ar_log invalid "invalid target IP '$AR_TARGET'";                 exit 0 ;;
+    denied)                ar_log denied  "refusing to block non-global/own-infra IP '$AR_TARGET'"; exit 0 ;;
+esac
+
+[ -n "$AR_TARGET" ] || { ar_log error "no target IP in parameters.extra_args"; exit 1; }
+
+if [ "$AR_CMD" = "delete" ]; then          # stateful timeout → reverse
+    ar_block_del "$AR_TARGET"
+    ar_log ok "unblocked $AR_TARGET (stateful timeout) backend=$(ar_backend)"
+    exit 0
+fi
+
+if ar_block_add "$AR_TARGET"; then
+    ar_log ok "blocked $AR_TARGET ttl=${SOAR_BLOCK_TTL}s backend=$(ar_backend)"
+    exit 0
+fi
+ar_log error "block failed for $AR_TARGET (no usable firewall backend?)"
+exit 1

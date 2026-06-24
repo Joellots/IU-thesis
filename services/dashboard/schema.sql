@@ -1,6 +1,6 @@
 -- schema.sql
 -- Auto-executed by PostgreSQL container on first start.
--- Defines all tables for the XAI-SOAR pipeline.
+-- Defines all tables for the Aegis pipeline.
 
 -- ── Enriched alerts (one row per flow, primary model only) ────────────────────
 CREATE TABLE IF NOT EXISTS alerts (
@@ -37,6 +37,14 @@ CREATE TABLE IF NOT EXISTS alerts (
     mapping_version    TEXT,
     mapping_status     TEXT,                 -- mapped / unmapped_heuristic / unmapped
     mapping_reason     TEXT,
+
+    -- Endpoint identity (nullable; stamped by the endpoint NFStream sensor that
+    -- captured the flow, NULL for dataset-replay/in-stack flows). Lets the SOAR
+    -- orchestrator route a block/isolate to the right Wazuh agent — it populates
+    -- the §7.1 handoff `endpoint:{host_id, ip, source}` object.
+    agent_id           TEXT,                 -- Wazuh agent id (e.g. "014")
+    host_id            TEXT,                 -- Wazuh agent name = endpoint host id
+    host_ip            TEXT,                 -- the sensor host's own IP
 
     -- Analyst decision + feedback (Step 6; written by the dashboard endpoint)
     analyst_decision   TEXT        DEFAULT 'pending',   -- pending / true_positive / false_positive
@@ -81,3 +89,4 @@ CREATE INDEX IF NOT EXISTS idx_alerts_pred_label    ON alerts(pred_label);
 CREATE INDEX IF NOT EXISTS idx_alerts_severity      ON alerts(severity);
 CREATE INDEX IF NOT EXISTS idx_alerts_translated_ts ON alerts(translated_ts DESC);
 CREATE INDEX IF NOT EXISTS idx_alerts_decision      ON alerts(analyst_decision);
+CREATE INDEX IF NOT EXISTS idx_alerts_agent_id      ON alerts(agent_id);

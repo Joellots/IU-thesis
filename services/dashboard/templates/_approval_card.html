@@ -1,0 +1,67 @@
+{% set aid = a.id if a else approval_id %}
+<div class="approval-card" id="approval-{{ aid }}">
+  {% if a %}
+  <div class="ac-head">
+    <span class="badge action-{{ a.action_type }}">{{ a.action_type | upper }}</span>
+    {% if a.severity_label or a.severity %}
+      <span class="badge sev-{{ (a.severity_label or '') | lower }}">{{ a.severity_label or ('SEV ' ~ a.severity) }}</span>
+    {% endif %}
+    {% if a.intel_malicious %}<span class="badge intel-bad">Intel: malicious</span>{% endif %}
+    <span class="ac-status st-{{ a.status }}">{{ a.status }}</span>
+    {% if a.mins_left is not none and a.status == 'pending' %}
+      <span class="ac-exp {{ 'exp-soon' if a.mins_left <= 5 else '' }}">
+        {{ ('expires ~' ~ a.mins_left ~ ' min') if a.mins_left >= 0 else 'EXPIRED' }}
+      </span>
+    {% endif %}
+  </div>
+
+  <div class="ac-body">
+    <div><span class="lbl">Endpoint</span> {{ a.host_id or '—' }}
+         <span class="muted">(agent {{ a.agent_id or '?' }}{% if a.host_ip %} · {{ a.host_ip }}{% endif %})</span></div>
+    {% if a.action_type == 'block' %}
+      <div><span class="lbl">Target IP</span> <code>{{ a.target_value or '—' }}</code></div>
+    {% endif %}
+    <div><span class="lbl">MITRE</span> {{ a.mitre_ttps | join(', ') if a.mitre_ttps else '—' }}
+         {% if a.pred_proba is not none %}<span class="muted">· p={{ '%.2f' % a.pred_proba }}</span>{% endif %}</div>
+    {% if a.annotation %}<div class="ac-annot">{{ a.annotation.split('\n')[0] }}</div>{% endif %}
+    <div class="ac-links">
+      {% if a.case_url %}<a href="{{ a.case_url }}" target="_blank" class="ac-link">↗ TheHive case{% if a.case_id %} {{ a.case_id }}{% endif %}</a>{% endif %}
+      {% if a.alert_id %}<a href="/alert/{{ a.alert_id }}" class="ac-link">↗ alert #{{ a.alert_id }}</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if result %}
+    {% if result.ok %}
+      <div class="ac-result res-ok">Decision applied — <b>{{ result.status }}</b>
+        {% if result.ar_result %}<pre>{{ result.ar_result | tojson(indent=2) }}</pre>{% endif %}
+      </div>
+    {% elif result.kind == 'conflict' %}
+      <div class="ac-result res-warn">{{ result.detail }}</div>
+    {% else %}
+      <div class="ac-result res-fail">{{ result.detail }}</div>
+    {% endif %}
+  {% elif a and a.status == 'pending' %}
+    <div class="ac-actions">
+      <button class="btn btn-approve"
+              hx-post="/approvals/decide"
+              hx-vals='{"approval_id": {{ a.id }}, "decision": "approve"}'
+              hx-target="#approval-{{ a.id }}" hx-swap="outerHTML"
+              hx-confirm="Approve {{ a.action_type | upper }} on {{ a.host_id or a.agent_id }}? This runs the REAL Active-Response on the endpoint.">
+        ✔ Approve
+      </button>
+      <button class="btn btn-reject"
+              hx-post="/approvals/decide"
+              hx-vals='{"approval_id": {{ a.id }}, "decision": "reject"}'
+              hx-prompt="Reason for rejection (optional)"
+              hx-target="#approval-{{ a.id }}" hx-swap="outerHTML">
+        ✘ Reject
+      </button>
+    </div>
+  {% elif a %}
+    <div class="ac-result res-{{ 'ok' if a.status in ('executed','rejected') else 'fail' }}">
+      Status: <b>{{ a.status }}</b>{% if a.analyst %} by {{ a.analyst }}{% endif %}{% if a.note %} — {{ a.note }}{% endif %}
+      {% if a.ar_result %}<pre>{{ a.ar_result | tojson(indent=2) }}</pre>{% endif %}
+    </div>
+  {% endif %}
+</div>

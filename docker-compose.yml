@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# XAI-SOAR Pipeline — docker-compose.yml
+# Aegis Pipeline — docker-compose.yml
 # Build order: kafka → producer → inference → translator → postgres → dashboard
 # Start everything: docker compose up --build
 # Start one service: docker compose up kafka kafka-ui
@@ -11,23 +11,27 @@ services:
   kafka:
     image: apache/kafka:3.7.0
     container_name: kafka
+    restart: unless-stopped          # survive host idle/reboot — SOAR reads this cross-machine
     ports:
       - "9092:9092"       # external access from host (e.g. testing scripts)
       - "9093:9093"       # controller port (internal)
       - "9094:9094"       # external listener — host access
-    environment:  
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_LOG_RETENTION_HOURS: 24
-      KAFKA_HEAP_OPTS: "-Xms512m -Xmx512m"   # cap JVM heap below the container limit
+    # environment:  
+    #   KAFKA_EXTERNAL_ADVERTISED_HOST=172.31.87.134
+    #   KAFKA_NODE_ID: 1
+    #   KAFKA_PROCESS_ROLES: broker,controller
+    #   KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094,CONTROLLER://0.0.0.0:9093
+    #   KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://${KAFKA_EXTERNAL_ADVERTISED_HOST:-localhost}:9094
+    #   KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+    #   KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    #   KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    #   KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+    #   KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    #   KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    #   KAFKA_LOG_RETENTION_HOURS: 24
+    #   KAFKA_HEAP_OPTS: "-Xms512m -Xmx512m"   # cap JVM heap below the container limit
+    env_file:
+    - .env
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 10s
@@ -137,6 +141,7 @@ services:
     environment:
       KAFKA_BROKER: kafka:9092
       INPUT_TOPIC: alerts
+      SOAR_ALERT_EVENTS_TOPIC: soar_alert_events
       CONSUMER_GROUP: translator_group
       DATABASE_URL: postgresql://user:pass@postgres:5432/soar
     networks:
@@ -152,6 +157,7 @@ services:
   postgres:
     image: postgres:15
     container_name: postgres
+    restart: unless-stopped          # survive host idle/reboot — the SOAR orchestrator depends on :5432
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
@@ -188,6 +194,12 @@ services:
     environment:
       DATABASE_URL: postgresql://user:pass@postgres:5432/soar
       REFRESH_INTERVAL_MS: 3000     # how often the UI polls for new alerts
+      # ── SOAR approvals (analyst approve/reject of gated block/isolate) ──
+      # The token is a shared secret — set SOAR_APPROVAL_TOKEN in the gitignored
+      # root .env (docker compose interpolates it here); never hard-code it.
+      SOAR_APPROVAL_URL:        ${SOAR_APPROVAL_URL:-https://172.31.80.148:8200}
+      SOAR_APPROVAL_TOKEN:      ${SOAR_APPROVAL_TOKEN:-}
+      SOAR_APPROVAL_VERIFY_TLS: ${SOAR_APPROVAL_VERIFY_TLS:-false}
     networks:
       - net
     restart: on-failure
@@ -195,6 +207,23 @@ services:
       resources:
         limits:
           memory: 512m
+          cpus: "0.5"
+
+  # ── 6b. Dashboard Web (React SPA — makeover of the htmx UI) ─────────────────
+  dashboard-web:
+    build: ./services/dashboard-web
+    container_name: dashboard_web
+    depends_on:
+      - dashboard
+    ports:
+      - "3000:80"                   # React UI; proxies /api → dashboard:8080
+    networks:
+      - net
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 256m
           cpus: "0.5"
 
   # ── 7. Kafka UI (dev only — to be removed in production) ─────────────────────────

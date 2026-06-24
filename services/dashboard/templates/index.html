@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>XAI-SOAR Alert Dashboard</title>
+<title>Aegis Alert Dashboard</title>
 <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,8 +22,10 @@
   .badge-low       { background:#00ff8822; color:#39ff88; border:1px solid #00ff8855; }
   .badge-benign    { background:#ffffff11; color:#aaa;    border:1px solid #ffffff22; }
   .badge-pending   { background:#3a3f55;   color:#aaa;    border:1px solid #555; }
-  .badge-confirmed { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d44; }
-  .badge-dismissed { background:#39ff8822; color:#39ff88; border:1px solid #39ff8844; }
+  .badge-confirmed,
+  .badge-true_positive  { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d44; }
+  .badge-dismissed,
+  .badge-false_positive { background:#39ff8822; color:#39ff88; border:1px solid #39ff8844; }
 
   .toolbar {
     padding: 10px 20px; display: flex; align-items: center; gap: 10px;
@@ -36,6 +38,8 @@
   }
   .toolbar a:hover { background: #3a3f55; color: #fff; }
   .toolbar .active { background: #4a5080; color: #fff; }
+  .count-pill { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d55;
+                border-radius:10px; padding:1px 7px; font-size:0.7rem; font-weight:700; margin-left:4px; }
 
   .table-wrap {
     width: 100%;
@@ -89,7 +93,7 @@
 
 <header>
   <div>
-    <h1>XAI-SOAR Alert Dashboard</h1>
+    <h1>Aegis Alert Dashboard</h1>
     <div class="subtitle">Encrypted Traffic Anomaly Detection &mdash; Real-time XAI Pipeline</div>
   </div>
 </header>
@@ -97,6 +101,7 @@
 <div class="toolbar">
   <a href="/" class="{{ 'active' if not malicious_only }}">All Flows</a>
   <a href="/?malicious_only=true" class="{{ 'active' if malicious_only }}">Malicious Only</a>
+  <a href="/approvals">Approvals{% if pending_count %}<span class="count-pill">{{ pending_count }}</span>{% endif %}</a>
   <a href="/metrics" target="_blank">&#8599; Metrics</a>
   <span style="margin-left:auto; font-size:0.72rem; color:#555;">
     Auto-refresh every {{ refresh_ms }}ms

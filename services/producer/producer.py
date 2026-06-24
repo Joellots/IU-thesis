@@ -43,6 +43,19 @@ BATCH_SIZE      = int(os.getenv("BATCH_SIZE",   "0"))     # 0 = no limit
 MALICIOUS_RATIO = float(os.getenv("MALICIOUS_RATIO", "-1"))  # -1 = use dataset as-is
 SHUFFLE         = os.getenv("SHUFFLE",          "true").lower() == "true"
 
+# ── Simulated endpoint identity (replay-as-endpoint) ──────────────────────────
+# When SIM_AGENT_ID is set, every replayed flow is stamped with this endpoint's
+# identity — making the dataset replay behave "as though THIS machine produced the
+# flow". It propagates through inference → translator → the alerts row, so the SOAR
+# orchestrator routes any block/isolate back to THIS host's Wazuh agent (and the
+# action is verifiable here). Set these to the detection host's real Wazuh
+# agent id / name / LAN IP (after installing the endpoint_agent bundle + enrolling).
+import socket
+SIM_AGENT_ID = os.getenv("SIM_AGENT_ID") or None
+SIM_HOST_ID  = os.getenv("SIM_HOST_ID")  or socket.gethostname()
+SIM_HOST_IP  = os.getenv("SIM_HOST_IP")  or None
+STAMP_IDENTITY = SIM_AGENT_ID is not None
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [PRODUCER] %(levelname)s %(message)s"
@@ -137,6 +150,10 @@ def stream(producer: KafkaProducer, batch: pd.DataFrame):
             "true_label": int(row[LABEL_COL]),
             "features":   row[feature_cols].to_dict(),
         }
+        if STAMP_IDENTITY:                       # replay-as-endpoint (this machine)
+            payload["agent_id"] = SIM_AGENT_ID
+            payload["host_id"]  = SIM_HOST_ID
+            payload["host_ip"]  = SIM_HOST_IP
         producer.send(TOPIC, value=payload)
 
         label_str = "MALICIOUS" if payload["true_label"] == 1 else "benign"
@@ -150,6 +167,10 @@ def stream(producer: KafkaProducer, batch: pd.DataFrame):
 def main():
     producer = make_producer()
     df       = load_dataset(DATASET_PATH)
+
+    if STAMP_IDENTITY:
+        log.info("Replay-as-endpoint: stamping agent_id=%s host_id=%s host_ip=%s onto every flow",
+                 SIM_AGENT_ID, SIM_HOST_ID, SIM_HOST_IP)
 
     iteration = 0
     while True:

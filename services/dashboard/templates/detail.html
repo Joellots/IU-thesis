@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Alert Detail — XAI-SOAR</title>
+<title>Alert Detail — Aegis</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e0e0e0; }
@@ -63,6 +63,11 @@
   .btn-dismiss { background: #39ff8822; color: #39ff88; border: 1px solid #39ff8855; }
   .btn-confirm:hover { background: #ff4d4d55; }
   .btn-dismiss:hover { background: #39ff8844; }
+  .fb-checks { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+  .fb-checks label { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#cfd3dc; cursor:pointer; }
+  .fb-checks input { width:15px; height:15px; accent-color:#6c8ebf; }
+  .fb-current { margin-top:12px; font-size:0.78rem; color:#888; display:flex; gap:14px; flex-wrap:wrap; }
+  .fb-current b { color:#aab; }
 </style>
 </head>
 <body>
@@ -172,26 +177,35 @@
   {% endif %}
 
   <div class="card">
-    <h2>Analyst Decision</h2>
+    <h2>Analyst Verdict &amp; Feedback (Step 6)</h2>
     <form action="/decision" method="post">
       <input type="hidden" name="alert_id" value="{{ alert.id }}">
       <div class="decision-form">
-        <textarea name="note" rows="2" placeholder="Optional note..."></textarea>
+        <textarea name="note" rows="3" placeholder="Optional note / reason..."></textarea>
         <div style="display:flex; flex-direction:column; gap:8px;">
-          <button type="submit" name="decision" value="confirmed" class="btn btn-confirm">
-            Confirm Alert
+          <button type="submit" name="decision" value="true_positive" class="btn btn-confirm">
+            True Positive
           </button>
-          <button type="submit" name="decision" value="dismissed" class="btn btn-dismiss">
-            Dismiss
+          <button type="submit" name="decision" value="false_positive" class="btn btn-dismiss">
+            False Positive
           </button>
         </div>
       </div>
+      <div class="fb-checks">
+        <label><input type="checkbox" name="explanation_useful" value="true">
+          The XAI explanation was useful</label>
+        <label><input type="checkbox" name="flag_for_retraining" value="true">
+          Flag this flow for the next retraining set</label>
+      </div>
     </form>
-    {% if alert.analyst_note %}
-      <p style="margin-top:10px; font-size:0.8rem; color:#888;">
-        Previous note: {{ alert.analyst_note }}
-      </p>
-    {% endif %}
+    <div class="fb-current">
+      <span>Verdict: <b>{{ alert.analyst_decision or 'pending' }}</b></span>
+      {% if alert.explanation_useful is not none %}
+        <span>Explanation useful: <b>{{ 'yes' if alert.explanation_useful else 'no' }}</b></span>{% endif %}
+      {% if alert.flag_for_retraining is not none %}
+        <span>Flagged for retraining: <b>{{ 'yes' if alert.flag_for_retraining else 'no' }}</b></span>{% endif %}
+      {% if alert.analyst_note %}<span>Note: <b>{{ alert.analyst_note }}</b></span>{% endif %}
+    </div>
   </div>
 
 </div>

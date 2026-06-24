@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOAR Approvals — Aegis Dashboard</title>
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e0e0e0; }
+
+  header { background: #1a1d27; border-bottom: 1px solid #2a2d3e; padding: 12px 20px; }
+  header h1 { font-size: 1rem; font-weight: 600; color: #fff; }
+  header .subtitle { font-size: 0.72rem; color: #888; }
+
+  .toolbar {
+    padding: 10px 20px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid #2a2d3e; background: #13161f; flex-wrap: wrap;
+  }
+  .toolbar a {
+    background: #2a2d3e; color: #ccc; border: 1px solid #3a3f55;
+    padding: 4px 10px; border-radius: 4px; font-size: 0.78rem;
+    cursor: pointer; text-decoration: none; white-space: nowrap;
+  }
+  .toolbar a:hover { background: #3a3f55; color: #fff; }
+  .toolbar .active { background: #4a5080; color: #fff; }
+  .count-pill { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d55;
+                border-radius:10px; padding:1px 8px; font-size:0.72rem; font-weight:700; }
+
+  .wrap { padding: 16px 20px; max-width: 980px; }
+  .config-warn { background:#ffa50018; border:1px solid #ffa50055; color:#ffb347;
+                 padding:8px 12px; border-radius:6px; font-size:0.78rem; margin-bottom:12px; }
+
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.68rem; font-weight:700; white-space:nowrap; }
+  .action-block   { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d55; }
+  .action-isolate { background:#b04dff22; color:#c97bff; border:1px solid #b04dff55; }
+  .sev-high   { background:#ff4d4d22; color:#ff6b6b; border:1px solid #ff4d4d55; }
+  .sev-medium { background:#ffa50022; color:#ffb347; border:1px solid #ffa50055; }
+  .sev-low    { background:#00ff8822; color:#39ff88; border:1px solid #00ff8855; }
+  .intel-bad  { background:#ff4d4d22; color:#ff8080; border:1px solid #ff4d4d44; }
+
+  .approval-card {
+    background:#161922; border:1px solid #2a2d3e; border-radius:8px;
+    padding:12px 14px; margin-bottom:12px;
+  }
+  .ac-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .ac-status { font-size:0.7rem; text-transform:uppercase; letter-spacing:.05em; color:#888; }
+  .ac-status.st-pending { color:#ffb347; }
+  .ac-exp { margin-left:auto; font-size:0.72rem; color:#888; }
+  .ac-exp.exp-soon { color:#ff6b6b; font-weight:600; }
+  .ac-body { font-size:0.82rem; line-height:1.7; color:#cfd3dc; }
+  .ac-body .lbl { display:inline-block; min-width:74px; color:#777; font-size:0.7rem;
+                  text-transform:uppercase; letter-spacing:.04em; }
+  .ac-body code { background:#0f1117; padding:1px 6px; border-radius:4px; color:#ffd479; font-family:monospace; }
+  .muted { color:#666; font-size:0.74rem; }
+  .ac-annot { color:#9aa0ac; font-size:0.74rem; margin-top:4px; font-style:italic; }
+  .ac-links { margin-top:6px; display:flex; gap:12px; }
+  .ac-link { color:#6c8ebf; text-decoration:none; font-size:0.74rem; }
+  .ac-link:hover { text-decoration:underline; }
+
+  .ac-actions { margin-top:10px; display:flex; gap:10px; }
+  .btn { border:none; border-radius:5px; padding:6px 16px; font-size:0.8rem; font-weight:600; cursor:pointer; }
+  .btn-approve { background:#1f7a4d; color:#eafff3; }
+  .btn-approve:hover { background:#25955e; }
+  .btn-reject  { background:#3a3f55; color:#ddd; }
+  .btn-reject:hover  { background:#55304a; color:#ffb3c8; }
+
+  .ac-result { margin-top:10px; padding:8px 10px; border-radius:5px; font-size:0.8rem; }
+  .res-ok   { background:#1f7a4d22; border:1px solid #1f7a4d66; color:#7fffb0; }
+  .res-warn { background:#ffa50018; border:1px solid #ffa50055; color:#ffb347; }
+  .res-fail { background:#ff4d4d18; border:1px solid #ff4d4d55; color:#ff8080; }
+  .ac-result pre { margin-top:6px; font-size:0.72rem; color:#cfd3dc; white-space:pre-wrap; word-break:break-word; }
+
+  .empty { color:#666; font-size:0.85rem; padding:24px; text-align:center;
+           border:1px dashed #2a2d3e; border-radius:8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SOAR Approvals</h1>
+  <div class="subtitle">Gated response actions (block / isolate) awaiting analyst decision</div>
+</header>
+
+<div class="toolbar">
+  <a href="/">All Flows</a>
+  <a href="/approvals" class="active">Approvals
+    {% if pending_count %}<span class="count-pill">{{ pending_count }}</span>{% endif %}</a>
+  <a href="/metrics" target="_blank">&#8599; Metrics</a>
+  <span style="margin-left:auto; font-size:0.72rem; color:#555;">
+    Decisions → {{ soar_url }}/soar/approve · auto-refresh {{ refresh_ms }}ms
+  </span>
+</div>
+
+<div class="wrap">
+  {% if not token_configured %}
+    <div class="config-warn">⚠ <b>SOAR_APPROVAL_TOKEN is not configured</b> — Approve/Reject will fail
+    with a config error until the shared token is set in the dashboard environment.</div>
+  {% endif %}
+
+  <div id="approvals-list"
+       hx-get="/approvals/live"
+       hx-trigger="every {{ refresh_ms }}ms"
+       hx-swap="innerHTML">
+    {% include "_approval_rows.html" %}
+  </div>
+</div>
+
+</body>
+</html>

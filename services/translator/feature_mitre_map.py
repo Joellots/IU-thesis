@@ -109,16 +109,24 @@ KEYWORD_TTP_RULES = [
 FALLBACK_TTP = ("T1071", "Application Layer Protocol")   # last-resort C2 for unmapped malicious
 
 
-# ── Severity (advisory) ───────────────────────────────────────────────────────
-# NOTE: the SOAR orchestrator is the authoritative source of severity (it
-# recomputes from pred_proba per SOAR_WORKFLOW_SPEC §Step 2). This label is
-# advisory context for the dashboard only.
-def compute_severity(pred_proba: float, n_matched_features: int) -> int:
-    """Returns severity 1 (low) / 2 (medium) / 3 (high)."""
-    score = pred_proba + min(n_matched_features * 0.03, 0.15)
-    if score >= 0.85:
+# ── Severity (advisory, ALIGNED to the SOAR orchestrator's bands) ─────────────
+# The SOAR orchestrator is the authoritative source of severity — it recomputes
+# from pred_proba alone (SOAR_WORKFLOW_SPEC §Step 2). This advisory label MUST use
+# the SAME bands so the dashboard reflects what SOAR will actually do. Bands are
+# env-tunable (defaults match the live orchestrator: High ≥0.80 / Medium ≥0.70 /
+# Low <0.70) — if the SOAR side retunes its thresholds, override these and restart
+# the translator, no code change needed.
+SEVERITY_HIGH_MIN = float(os.getenv("SEVERITY_HIGH_MIN", "0.80"))
+SEVERITY_MED_MIN  = float(os.getenv("SEVERITY_MED_MIN",  "0.70"))
+
+
+def compute_severity(pred_proba: float, n_matched_features: int = 0) -> int:
+    """Returns severity 1 (low) / 2 (medium) / 3 (high), from pred_proba only —
+    matching the orchestrator. `n_matched_features` is retained for call-site
+    compatibility but no longer shifts the band."""
+    if pred_proba >= SEVERITY_HIGH_MIN:
         return 3
-    elif score >= 0.65:
+    elif pred_proba >= SEVERITY_MED_MIN:
         return 2
     return 1
 

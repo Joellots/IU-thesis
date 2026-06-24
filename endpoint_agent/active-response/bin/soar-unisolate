@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# soar-unisolate — Wazuh Active-Response: restore connectivity after isolate.
+# Idempotent: a no-op if the host is not isolated.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../lib/soar-ar-common.sh
+. "$SCRIPT_DIR/../lib/soar-ar-common.sh"
+
+ar_parse_stdin
+
+case "$AR_STATUS" in
+    parse_error|no_python) ar_log error "stdin parse failed ($AR_STATUS)"; exit 1 ;;
+esac
+
+ar_isolate_off
+ar_log ok "host UN-ISOLATED"
+exit 0

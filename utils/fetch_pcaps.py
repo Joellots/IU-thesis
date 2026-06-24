@@ -2,7 +2,7 @@
 """
 fetch_pcaps.py
 ──────────────
-Download publicly available PCAP files for XAI-SOAR model evaluation.
+Download publicly available PCAP files for Aegis model evaluation.
 
 Sources: CTU-13 Botnets, IoT-23, CTU-Normal — all from the Stratosphere Research
 Group / Malware Capture Facility Project (MCFP) at Czech Technical University.
