@@ -13,7 +13,7 @@ the SOAR loop on the endpoint, Wazuh-active-response style.
 
 ```
   THIS endpoint ──nfstream flows (raw_flows)──▶ detection pipeline ──alerts──▶ SOAR orchestrator
-        ▲                                                                              │
+        ▲                                                                               │
         └──────────── Wazuh manager  ◀── PUT /active-response {!soar-block, [ip]} ◀─────┘
                        (relays to this agent → runs soar-block locally)
 ```
