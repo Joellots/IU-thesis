@@ -38,14 +38,17 @@ usage() {
 detctl — Aegis detection engine + endpoint agent
 
 STACK            up [svc]  down  reset  build [svc]  restart [svc]  status  logs [svc]  config
-SIMULATION       sim [AGENT_ID]   replay
+SIMULATION       sim [AGENT_ID]   replay   pcap-replay <list|all|--family|--class|--malicious-only|...> (--help)
+METRICS          sim-harvest <begin [--reset] | end | render | all>
 INSPECT (DB)     alerts   approvals   psql
 DATA & MODEL     dataset [args]   eval [args]   fetch-pcaps [args]   fetch-mta [args]
 ENDPOINT AGENT   agent <status|blocks|ar-log [-f]|block <ip>|unblock <ip>|isolate|unisolate|install [args]|uninstall|package>
 
 Examples:
   ./scripts/detctl.sh reset                 # clean DB + bring the pipeline up
+  ./scripts/detctl.sh sim-harvest begin     # watermark BEFORE a simulation run
   ./scripts/detctl.sh sim 001               # replay AS this host's Wazuh agent 001
+  ./scripts/detctl.sh sim-harvest all       # AFTER: capture metrics + render figures
   ./scripts/detctl.sh approvals             # pending SOAR block/isolate actions
   ./scripts/detctl.sh agent status          # Wazuh agent + AR scripts + enforced blocks
   ./scripts/detctl.sh agent block 8.8.8.8   # manually add a reversible endpoint block
@@ -88,6 +91,142 @@ agent_cmd() {
   esac
 }
 
+# ── Detection-side metric harvest (non-destructive) ───────────────────────────
+# Splits by image: data phases need psycopg2 (dashboard image), figures need
+# matplotlib (inference image). Repo isn't mounted in the running containers, so
+# we spin one-off containers with a bind mount. Images/network resolved from the
+# live stack so this survives a differently-named deploy dir.
+img_of() { docker inspect -f '{{.Config.Image}}' "$1" 2>/dev/null || echo "$2"; }
+
+sim_harvest_cmd() {
+  local sub="${1:-}"; shift || true
+  local dash inf dburl
+  dash="$(img_of dashboard dev-dashboard)"; inf="$(img_of inference dev-inference)"
+  dburl="${DATABASE_URL:-postgresql://user:pass@postgres:5432/soar}"
+  local RUN=(docker run --rm -i --user "$(id -u):$(id -g)" -v "$REPO:/work" -w /work)
+  local data=("${RUN[@]}" --network dev_net -e DATABASE_URL="$dburl" "$dash" python utils/sim_harvest.py)
+  local figs=("${RUN[@]}" -e MPLCONFIGDIR=/tmp/mpl "$inf" python utils/sim_harvest.py render)
+  case "$sub" in
+    begin|end) "${data[@]}" "$sub" "$@" ;;
+    render)    "${figs[@]}" ;;
+    all)       "${data[@]}" end "$@" && "${figs[@]}" ;;
+    *) echo "sim-harvest: begin [--reset] | end | render | all"; return 1 ;;
+  esac
+}
+
+# ── Malware PCAP replay (real malicious flows + documented IOCs) ──────────────
+# Reads a PCAP through NFStream (PCAP_FILE mode) → flows (with SNI/JA3) → live Kafka.
+# No packets hit the wire. Flows are stamped with THIS endpoint's identity so SOAR
+# attributes them here. IOCs per pcaps/mta/ioc_manifest.json (domains/IPs → real
+# threat-intel hits for the Cortex/MISP/URLhaus auto-block path).
+pcap_replay_cmd() {
+  local MTA="$REPO/pcaps/mta" MAN="$REPO/pcaps/mta/ioc_manifest.json"
+  local SENV="$REPO/endpoint_agent/sensor/.env"
+  local img="soar-endpoint-sensor:latest"   # the freshly-built sensor image (fixed tag)
+  local AID HID HIP
+  AID=$(grep -E '^AGENT_ID=' "$SENV" 2>/dev/null | cut -d= -f2)
+  HID=$(grep -E '^HOST_ID='  "$SENV" 2>/dev/null | cut -d= -f2)
+  HIP=$(grep -E '^HOST_IP='  "$SENV" 2>/dev/null | cut -d= -f2)
+
+  # selection + options
+  local MODE="" FAMILY="" CLASS="" LIMIT="" DELAY=0 LOOP=1 DURATION="" MALONLY=0 DRY=0 DO_LIST=0
+  local FILES=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      list)             DO_LIST=1; shift ;;
+      all)              MODE=all; shift ;;
+      --family)         FAMILY="$2"; MODE="${MODE:-filter}"; shift 2 ;;
+      --class)          CLASS="$2"; MODE="${MODE:-filter}"; shift 2 ;;
+      --file)           FILES+=("$2"); MODE=files; shift 2 ;;
+      --limit)          LIMIT="$2"; shift 2 ;;
+      --delay)          DELAY="$2"; shift 2 ;;
+      --loop)           LOOP="$2"; shift 2 ;;
+      --duration)       DURATION="$2"; shift 2 ;;
+      --malicious-only) MALONLY=1; shift ;;
+      --agent-id)       AID="$2"; shift 2 ;;
+      --host-ip)        HIP="$2"; shift 2 ;;
+      --dry-run)        DRY=1; shift ;;
+      -h|--help)
+        printf '%s\n' \
+          "pcap-replay — replay malware pcaps (NFStream → Kafka): real flows + manifest IOCs" \
+          "  select: list | all | --family <F> | --class <exfil|c2_beaconing> | --file <f> (repeatable) | <f.pcap>" \
+          "  opts:   --limit N  --delay SEC  --loop <N|inf>  --duration SEC" \
+          "          --malicious-only  --agent-id ID  --host-ip IP  --dry-run"
+        return 0 ;;
+      *.pcap)           FILES+=("$1"); MODE=files; shift ;;
+      *) echo "pcap-replay: unknown arg '$1' (try --help)"; return 1 ;;
+    esac
+  done
+  if [ "$DO_LIST" = 1 ] || { [ -z "$MODE" ] && [ "${#FILES[@]}" -eq 0 ]; }; then
+    "$(detctl_py)" - "$MAN" "$FAMILY" "$CLASS" <<'PY'
+import json,sys
+m=json.load(open(sys.argv[1])); fam,cls=sys.argv[2],sys.argv[3]
+rows=[(k,v) for k,v in sorted(m.items())
+      if (not fam or v.get('family','').lower()==fam.lower())
+      and (not cls or v.get('class','').lower()==cls.lower())]
+print(f"{len(rows)} pcap(s) — file | family | class | #IOCs:")
+for k,v in rows:
+    n=len(v.get('malicious_domains',[]))+len(v.get('malicious_ips',[]))
+    print(f"  {k:42s} {v.get('family','?'):12s} {v.get('class','?'):12s} {n}")
+PY
+    echo ""; echo "e.g.:  detctl pcap-replay --family Lumma --malicious-only --delay 5"
+    return 0
+  fi
+
+  local SELECTED=()
+  if [ "$MODE" = files ]; then
+    SELECTED=("${FILES[@]}")
+    [ -n "$LIMIT" ] && SELECTED=("${SELECTED[@]:0:$LIMIT}")
+  else
+    mapfile -t SELECTED < <("$(detctl_py)" - "$MAN" "$FAMILY" "$CLASS" "${LIMIT:-0}" <<'PY'
+import json,sys
+m=json.load(open(sys.argv[1])); fam,cls,lim=sys.argv[2],sys.argv[3],int(sys.argv[4])
+out=[k for k,v in sorted(m.items())
+     if (not fam or v.get('family','').lower()==fam.lower())
+     and (not cls or v.get('class','').lower()==cls.lower())]
+print("\n".join(out[:lim] if lim>0 else out))
+PY
+)
+  fi
+  [ "${#SELECTED[@]}" -eq 0 ] && { echo "no pcaps matched the selection."; return 1; }
+  echo "selection: ${#SELECTED[@]} pcap(s)  loop=$LOOP delay=${DELAY}s malicious-only=$MALONLY dry=$DRY"
+  echo "identity:  agent_id=${AID:-?} host_ip=${HIP:-?}"
+
+  iocs_for() {
+    "$(detctl_py)" - "$MAN" "$1" <<'PY'
+import json,sys
+v=json.load(open(sys.argv[1])).get(sys.argv[2],{})
+print(",".join(v.get('malicious_domains',[])+v.get('malicious_ips',[])))
+PY
+  }
+  run_pcap() {
+    local f="$1"; [ -f "$MTA/$f" ] || { echo "  ! no such pcap: $f"; return 1; }
+    local ioc=""; [ "$MALONLY" = 1 ] && ioc="$(iocs_for "$f")"
+    if [ "$DRY" = 1 ]; then echo "  [dry] $f  ioc-filter=${ioc:-none}"; return 0; fi
+    echo "  ▶ $f"
+    docker run --rm -i --network dev_net \
+      -e PCAP_FILE="/pcaps/$f" -e KAFKA_BROKER=kafka:9092 -e TOPIC=raw_flows \
+      -e ENCRYPTED_ONLY="${ENCRYPTED_ONLY:-true}" -e IOC_ALLOWLIST="$ioc" \
+      -e AGENT_ID="$AID" -e HOST_ID="$HID" -e HOST_IP="$HIP" \
+      -v "$MTA:/pcaps:ro" "$img" 2>&1 | grep -iE 'complete|error' | tail -2
+  }
+
+  local start iter=0; start=$(date +%s)
+  while :; do
+    iter=$((iter+1))
+    if [ "$LOOP" != 1 ] || [ -n "$DURATION" ]; then echo "── pass $iter ──"; fi
+    for f in "${SELECTED[@]}"; do
+      run_pcap "$f"
+      if [ "$DRY" = 0 ] && [ "${DELAY:-0}" != 0 ]; then sleep "$DELAY"; fi
+    done
+    if [ -n "$DURATION" ]; then
+      [ $(( $(date +%s) - start )) -ge "$DURATION" ] && break
+    elif [ "$LOOP" = inf ]; then :; else
+      [ "$iter" -ge "${LOOP:-1}" ] && break
+    fi
+  done
+}
+
 cmd="${1:-help}"; shift || true
 case "$cmd" in
   # ── stack ──
@@ -111,6 +250,12 @@ case "$cmd" in
     fi
     echo "replaying — 'detctl logs producer' · 'detctl alerts' · 'detctl approvals'" ;;
   replay)     $DC up -d producer; echo "continuous replay (LOOP=true)." ;;
+
+  # ── metrics harvest ──
+  sim-harvest|harvest) sim_harvest_cmd "$@" ;;
+
+  # ── malware pcap replay ──
+  pcap-replay|pcap)    pcap_replay_cmd "$@" ;;
 
   # ── inspect ──
   alerts)

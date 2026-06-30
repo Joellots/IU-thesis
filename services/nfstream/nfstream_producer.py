@@ -80,12 +80,41 @@ AGENT_ID = os.getenv("AGENT_ID") or None
 HOST_ID  = os.getenv("HOST_ID")  or os.getenv("HOSTNAME") or os.uname().nodename or None
 HOST_IP  = os.getenv("HOST_IP")  or _default_host_ip()
 
-# BPF filter — encrypted traffic only
-BPF_FILTER = os.getenv(
-    "BPF_FILTER",
-    "tcp port 443 or udp port 443 or tcp port 465 "
-    "or tcp port 993 or tcp port 995 or tcp port 853"
-)
+# BPF filter — captured at the kernel. Default = all TCP (any port), so we never miss
+# encrypted C2 on an unforeseen port (a fixed port allowlist structurally can't). The
+# producer then keeps only TLS/QUIC-classified flows (ENCRYPTED_ONLY) so the model isn't
+# flooded with plaintext (SSH, HTTP, the pipeline's own traffic). Override either as needed.
+BPF_FILTER = os.getenv("BPF_FILTER", "tcp")
+
+# Forward only flows nDPI classifies as encrypted (TLS/SSL/QUIC/DTLS) or that carry a TLS SNI.
+ENCRYPTED_ONLY = os.getenv("ENCRYPTED_ONLY", "true").lower() in ("1", "true", "yes")
+
+
+def _is_encrypted(flow):
+    """True if the flow is TLS/SSL/QUIC/DTLS (nDPI) or presents a TLS SNI."""
+    app = (getattr(flow, "application_name", "") or "").upper()
+    if any(k in app for k in ("TLS", "SSL", "QUIC", "DTLS")):
+        return True
+    return bool(getattr(flow, "requested_server_name", None))
+
+
+# Optional IOC allowlist (replay flow-purity): when set, forward ONLY flows whose src/dst IP
+# or TLS SNI matches one of these indicators (e.g. a pcap's manifest IOCs), dropping the
+# benign background traffic in the capture. Empty = forward all (subject to ENCRYPTED_ONLY).
+IOC_ALLOWLIST = [x.strip().lower() for x in os.getenv("IOC_ALLOWLIST", "").split(",") if x.strip()]
+
+
+def _matches_ioc(flow):
+    if not IOC_ALLOWLIST:
+        return True
+    ips = {str(getattr(flow, "src_ip", "")).lower(), str(getattr(flow, "dst_ip", "")).lower()}
+    sni = (getattr(flow, "requested_server_name", "") or "").lower()
+    for ioc in IOC_ALLOWLIST:
+        if ioc in ips:
+            return True
+        if sni and (sni == ioc or sni.endswith("." + ioc)):
+            return True
+    return False
 
 if not PCAP_FILE and not INTERFACE:
     raise RuntimeError("No network interface found and no PCAP_FILE provided.")
@@ -385,8 +414,14 @@ def main():
 
     log.info("Streaming started — waiting for flows...")
 
+    skipped_plaintext = 0
     for flow in streamer:
         try:
+            if ENCRYPTED_ONLY and not _is_encrypted(flow):
+                skipped_plaintext += 1
+                continue
+            if not _matches_ioc(flow):
+                continue
             features = flow_to_features(flow)
             payload = build_payload(features)
             producer.send(TOPIC, value=payload)
@@ -422,6 +457,7 @@ def main():
                 log.info(
                     f"Flows published: {flow_count}  "
                     f"errors: {error_count}  "
+                    f"skipped(plaintext): {skipped_plaintext}  "
                     f"last app: {flow.application_name}"
                 )
 

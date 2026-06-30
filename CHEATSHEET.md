@@ -20,7 +20,8 @@ URLs: **dashboard (React)** http://172.31.87.134:3000 · **dashboard (htmx)** :8
 | Group | Commands |
 |---|---|
 | **Stack** | `up [svc]` · `down` · `reset` · `build [svc]` · `restart [svc]` · `status` · `logs [svc]` · `config` |
-| **Simulation** | `sim [AGENT_ID]` · `replay` |
+| **Simulation** | `sim [AGENT_ID]` · `replay` · `pcap-replay <list\|all\|--family\|--class\|…>` |
+| **Metrics** | `sim-harvest <begin [--reset]\|end\|render\|all>` |
 | **Inspect (DB)** | `alerts` · `approvals` · `psql` |
 | **Data & model** | `dataset [args]` · `eval [args]` · `fetch-pcaps [args]` · `fetch-mta [args]` |
 | **Endpoint agent** | `agent status\|blocks\|ar-log [-f]\|unblock <ip>\|unisolate\|install [args]\|uninstall\|package` |
@@ -47,6 +48,36 @@ Services: `kafka producer nfstream inference translator postgres dashboard dashb
 ```
 The replay-as-endpoint identity is taken from `.env` (`SIM_HOST_ID`, `SIM_HOST_IP`) + the
 `AGENT_ID` arg. The dataset is **not** modified — identity is injected by the producer.
+
+## 2b. Replay real malware PCAPs (high-confidence flows + documented IOCs)
+Reads a malware capture through NFStream (`PCAP_FILE` mode) → flows (with SNI/JA3) → live Kafka.
+**No packets hit the wire.** Flows are stamped with this endpoint's identity, and carry **real
+malicious domains/IPs** (per `pcaps/mta/ioc_manifest.json`) → genuine MISP/URLhaus/VT hits → the
+SOAR auto-block path. Unlike the dataset replay, these reproduce the in-distribution signatures the
+model knows, so they score reliably high.
+```bash
+./scripts/detctl.sh pcap-replay list                         # 86 pcaps: file | family | class | #IOCs
+./scripts/detctl.sh pcap-replay list --class exfil           # filtered listing
+./scripts/detctl.sh pcap-replay --family Lumma               # replay a whole family
+./scripts/detctl.sh pcap-replay --class c2_beaconing --limit 5
+./scripts/detctl.sh pcap-replay Lumma_2023-10-11.pcap        # one file (or --file f (repeatable))
+./scripts/detctl.sh pcap-replay --family Meduza --malicious-only --dry-run   # preview + IOC filter
+```
+Options (compose freely): `--family <F>` · `--class <exfil|c2_beaconing>` · `--limit N` ·
+`--delay SEC` (pace between pcaps) · `--loop <N|inf>` · `--duration SEC` · `--malicious-only`
+(keep only flows touching that pcap's IOCs — drops benign background) · `--agent-id ID` ·
+`--host-ip IP` · `--dry-run`. The replay uses the built `soar-endpoint-sensor:latest` image on
+`dev_net` → `kafka:9092`.
+
+## 2c. Capture simulation metrics (detection side)
+```bash
+./scripts/detctl.sh sim-harvest begin [--reset]   # BEFORE the run: watermark + run metadata (--reset truncates alerts)
+./scripts/detctl.sh sim-harvest all               # AFTER: metrics + figures → thesis/eval/
+#   begin/end run in the dashboard image (psycopg2); render runs in the inference image (matplotlib)
+```
+Outputs `thesis/eval/SIM_DETECTION_SUMMARY.md` + CSVs + PNGs (operational confidence, severity
+funnel, intra-detection latency `sent_ts→inferred_ts→translated_ts`, endpoints). Join to the SOAR
+harvest on `alerts.id`/`flow_id`; full MTTR = `sent_ts → ar_executed_ts`.
 
 ## 3. Inspect the alerts & SOAR approvals
 ```bash

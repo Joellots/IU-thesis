@@ -8,6 +8,7 @@ data/*
 !data/training_dataset.csv
 
 eval_results*
+docs/
 
 # Models: ship the trained mapper (≈50 MB) so inference runs out-of-the-box.
 models/*
@@ -37,5 +38,13 @@ services/dashboard-web/dist/
 endpoint_agent/sensor/output/
 
 # SOAR-side reference snapshot — canonical lives in the SOAR repo; kept local only,
-# never pushed from the detection repo. (context/ is the authoritative shared copy.)
+# never pushed from the detection repo. (docs/ is the authoritative shared copy.)
 context_soar/
+
+# Handover/generated artifacts — never committed to the detection repo:
+#   handover/SOAR/                 a whole separate repo snapshot (may carry secrets)
+#   handover/codex_report_bundle/  the generated Codex/ChatGPT report bundle
+#   handover/aegis_thesis_context_bundle_*.{tar.gz,zip}  packaged context archives
+handover/
+
+thesis/

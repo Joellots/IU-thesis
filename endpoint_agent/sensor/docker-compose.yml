@@ -12,7 +12,7 @@ services:
       - NET_RAW
     volumes:
       - ./output:/app/generated_flows
-    env_file: ../.env
+    env_file: .env
     restart: unless-stopped
     deploy:
       resources:

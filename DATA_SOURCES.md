@@ -19,7 +19,7 @@ captures. The flows were extracted and labelled from publicly available captures
 
 The labelling is **IOC-completeness-dependent** (a malicious endpoint absent from a capture's
 published IOC file is labelled benign) — a documented limitation, not ground-truth-perfect.
-Methodology and the full sourcing narrative: `context/DETECTION_FRAMEWORK_CONTEXT.md` (Appendix A).
+Methodology and the full sourcing narrative: `docs/DETECTION_FRAMEWORK_CONTEXT.md` (Appendix A).
 
 > To replay your **own** traffic instead, replace `data/training_dataset.csv` with a CSV of the
 > same columns (or rebuild with `detctl dataset`). The large raw `data/dataset.csv` is **not**
