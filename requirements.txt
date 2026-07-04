@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# XAI-SOAR Pipeline — Python Requirements
+# Covers: Jupyter notebook, producer, inference, translator, dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── Core data science ─────────────────────────────────────────────────────────
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+scikit-learn==1.4.2
+joblib==1.4.2
+
+
+# ── ML models ─────────────────────────────────────────────────────────────────
+xgboost==2.0.3
+interpret==0.6.1                # EBM (ExplainableBoostingClassifier)
+
+
+# ── XAI / Explainability ──────────────────────────────────────────────────────
+shap==0.45.1
+lime==0.2.0.1
+
+
+# ── Kafka streaming ───────────────────────────────────────────────────────────
+kafka-python-ng==2.2.3
+
+
+# ── Dashboard (FastAPI + Jinja2 + htmx backend) ───────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+jinja2==3.1.4
+python-multipart==0.0.9         # required for FastAPI Form() parsing
+
+
+# ── Database ──────────────────────────────────────────────────────────────────
+psycopg2-binary==2.9.9          # PostgreSQL driver
+
+
+# ── Jupyter notebook ──────────────────────────────────────────────────────────
+jupyter==1.0.0
+ipykernel==6.29.4
+ipywidgets==8.1.3               # for notebook progress bars / interactive cells
+
+
+# ── Visualisation (used in notebook) ─────────────────────────────────────────
+matplotlib==3.9.0
+seaborn==0.13.2
+plotly==5.22.0                  # optional — for interactive SHAP plots
+
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1            # load .env files locally during development
+tqdm==4.66.4                    # progress bars in notebook and services
+requests==2.32.3                # handy for testing dashboard endpoints manually
+
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.2.2

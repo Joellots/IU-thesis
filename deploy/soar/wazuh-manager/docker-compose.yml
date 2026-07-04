@@ -1,0 +1,96 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Wazuh MANAGER-ONLY — SOAR-side enforcement channel
+#
+# We use Wazuh purely as the agent-management + on-demand Active-Response (AR)
+# relay, NOT as a SIEM. So this deploys ONLY the manager — no wazuh-indexer
+# (OpenSearch, 2-4GB) and no wazuh-dashboard. This host is memory-tight
+# (already runs TheHive/ES, Cortex, MISP, Shuffle+opensearch); the full Wazuh
+# stack would OOM. The manager alone is ~0.5-1GB.
+#
+# Role:
+#   - port 1515  → agent enrollment (authd)
+#   - port 1516→1514 → agent communication (1514 is taken by tenzir on this host)
+#   - port 55000 → Wazuh REST API. The SOAR orchestrator authenticates here and
+#     calls `PUT /active-response?agents_list=<id>` to run a vetted AR script on
+#     the targeted endpoint, on demand, at the SOAR engine's discretion.
+#
+# Start:  scripts/soarctl.sh start wazuh-manager
+# Stand-alone: docker compose -f deploy/soar/wazuh-manager/docker-compose.yml up -d
+#
+# filebeat inside the image will log connection errors (no indexer) — harmless;
+# the manager core (wazuh-apid / wazuh-remoted / wazuh-analysisd) runs fine.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  wazuh.manager:
+    image: wazuh/wazuh-manager:4.14.5
+    container_name: wazuh-manager
+    hostname: wazuh.manager
+    restart: unless-stopped
+
+    # Keep it boxed in on this memory-tight host.
+    mem_limit: 1g
+    mem_reservation: 512m
+    cpus: "0.50"
+    pids_limit: 512
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 655360
+        hard: 655360
+
+    ports:
+      - "1516:1514"     # agent communication (host 1516 → container 1514; 1514 used by tenzir)
+      - "1515:1515"     # agent enrollment (authd)
+      - "55000:55000"   # Wazuh REST API — SOAR posts PUT /active-response here
+
+    environment:
+      - API_USERNAME=wazuh-wui
+      # The manager API password. MUST match WAZUH_API_PASSWORD in the orchestrator
+      # .env (that's how the orchestrator authenticates). No secret is committed:
+      # set WAZUH_MANAGER_API_PASSWORD in deploy/soar/wazuh-manager/.env (gitignored)
+      # or your shell. The placeholder default just lets it boot; CHANGE IT. Wazuh
+      # requires complexity (upper/lower/digit/symbol, 8+).
+      - API_PASSWORD=${WAZUH_MANAGER_API_PASSWORD:-MyS3cr37P450r.*-}
+      # Manager-only: no indexer, so don't TLS-verify the (absent) filebeat target.
+      # filebeat will log harmless connection errors; the manager core runs fine.
+      - FILEBEAT_SSL_VERIFICATION_MODE=none
+
+    volumes:
+      - wazuh_api_configuration:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+      - wazuh_var_multigroups:/var/ossec/var/multigroups
+      - wazuh_integrations:/var/ossec/integrations
+      - wazuh_active_response:/var/ossec/active-response/bin
+      - wazuh_agentless:/var/ossec/agentless
+      - wazuh_wodles:/var/ossec/wodles
+      - filebeat_etc:/etc/filebeat
+      - filebeat_var:/var/lib/filebeat
+      # SOAR on-demand AR command registration (soar-block/unblock/isolate/unisolate).
+      # The image copies /wazuh-config-mount/etc/ossec.conf to /var/ossec/etc on boot.
+      - ./config/ossec.conf:/wazuh-config-mount/etc/ossec.conf
+
+    networks:
+      - wazuh_mgr
+
+networks:
+  wazuh_mgr:
+    driver: bridge
+
+volumes:
+  wazuh_api_configuration:
+  wazuh_etc:
+  wazuh_logs:
+  wazuh_queue:
+  wazuh_var_multigroups:
+  wazuh_integrations:
+  wazuh_active_response:
+  wazuh_agentless:
+  wazuh_wodles:
+  filebeat_etc:
+  filebeat_var:

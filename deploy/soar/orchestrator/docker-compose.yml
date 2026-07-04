@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SOAR Orchestrator — SOAR-side stack
+#
+# Decoupled from the detection docker-compose (which no longer ships the
+# orchestrator). This service:
+#   - consumes the detection Postgres `alerts` contract CROSS-MACHINE
+#     (DATABASE_URL -> <DETECTION_HOST_IP>:5432, set in the orchestrator .env);
+#   - drives the LOCAL SOAR stack (TheHive/Cortex/MISP/Shuffle) over the host's
+#     published ports (TheHive/Cortex/Shuffle via the host LAN IP in .env, MISP
+#     via host.docker.internal) — no need to join the vendored stacks' networks.
+#
+# Run it (single command):  scripts/soarctl.sh start orchestrator --build
+# Standalone:               docker compose -f deploy/soar/orchestrator/docker-compose.yml up -d --build
+#
+# COORDINATION DEPENDENCY: the detection Postgres must publish 5432
+# (ports: ["5432:5432"]) and firewall it to this host for the cross-machine
+# read to work. (Confirmed durable on the detection side.)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  soar_orchestrator:
+    build:
+      context: ../../../services/soar_orchestrator
+    image: soar_orchestrator:local
+    container_name: soar_orchestrator
+    restart: unless-stopped
+
+    # Secrets + endpoints (DATABASE_URL, THEHIVE/CORTEX/MISP/SHUFFLE URLs, API
+    # keys, ORCHESTRATOR_DRY_RUN=false) all live in the orchestrator's .env.
+    env_file:
+      - path: ../../../services/soar_orchestrator/.env
+        required: true
+
+    # Dry-run only when the local SOAR stack isn't up; the .env default is
+    # false. Override at runtime with ORCHESTRATOR_DRY_RUN=true in the env.
+    environment:
+      ORCHESTRATOR_DRY_RUN: "${ORCHESTRATOR_DRY_RUN:-false}"
+
+    # MISP is reached at host.docker.internal:8088 (see MISP_URL in .env).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      - "8200:8200"   # api_server.py — Shuffle POST /soar/shuffle-result + Step-6 /soar/feedback
+      - "9100:9100"   # Prometheus metrics scrape target
+
+    volumes:
+      - attack_stix_cache:/app/cache   # cached MITRE ATT&CK STIX bundle
+
+    networks:
+      - soar_orch
+
+networks:
+  soar_orch:
+    driver: bridge
+
+volumes:
+  attack_stix_cache:

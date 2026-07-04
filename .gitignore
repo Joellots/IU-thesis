@@ -1,0 +1,81 @@
+
+# ── Vendored upstream SOAR stacks (large; obtained locally — see deploy/soar/README.md) ─
+# Third-party projects fetched per the deploy README, not committed here. OUR infra —
+# deploy/soar/orchestrator/ and deploy/soar/wazuh-manager/ — IS committed. Any stack-local
+# .env stays ignored by the `.env` rule in the Secrets section below.
+deploy/soar/docker/
+deploy/soar/thehive
+deploy/soar/thehive-old/
+deploy/soar/misp/
+deploy/soar/shuffle/
+deploy/soar/wazuh/
+# Wazuh manager-only: cert-generator cruft + generated certs are not needed for
+# manager-only (filebeat verification is off). Commit only compose + README + config/ossec.conf.
+deploy/soar/wazuh-manager/certs.yml
+deploy/soar/wazuh-manager/generate-indexer-certs.yml
+deploy/soar/wazuh-manager/config/certs.yml
+deploy/soar/wazuh-manager/config/wazuh_indexer_ssl_certs/
+deploy/soar/wazuh-manager/config/wazuh_cluster/
+*claude*
+# ── Machine-local: detection-side data, models, and eval output ──────────────────
+data/
+models/
+eval_results*
+
+# ── Machine-local: PCAP corpus (the IOC manifest is load-bearing — keep it) ──────
+pcaps/*
+!pcaps/mta/
+pcaps/mta/*
+!pcaps/mta/ioc_manifest.json
+
+prompts/
+report/
+
+# ── Machine-local: NFStream capture output ────────────────────────────────────────
+services/nfstream/output/*
+
+# ── Generated snapshots / scratch ─────────────────────────────────────────────────
+tree.txt
+tmp-*.json
+tmp_*.json
+# Stray archives / repo dumps — never commit (GitHub rejects >100MB anyway).
+*.zip
+soar.zip
+.claude/
+
+# ── Python artefacts ──────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.log
+
+# ── Secrets, credentials, and certificates ────────────────────────────────────────
+.env
+.env/
+.env.*
+*.venv/
+# ...but DO commit the documented template (placeholders only, no real secrets):
+!.env.example
+!**/.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+*credentials*.env
+*secret*.env
+*secrets*.env
+*token*.env
+*password*.env
+
+# ── TheHive external production deployment (local only) ───────────────────────────
+thehive_external/**/cassandra/data/
+thehive_external/**/elasticsearch/data/
+thehive_external/**/logs/
+thehive_external/**/certificates/
+
+# ── Infrastructure-as-code state ──────────────────────────────────────────────────
+.terraform/
+*.tfstate
+*.tfvars
