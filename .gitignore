@@ -29,7 +29,6 @@ pcaps/mta/*
 !pcaps/mta/ioc_manifest.json
 
 prompts/
-report/
 
 # ── Machine-local: NFStream capture output ────────────────────────────────────────
 services/nfstream/output/*
